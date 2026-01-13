@@ -162,36 +162,10 @@ end
 -- WORD LOGIC & SCORING
 --------------------------------------------------------------------------------
 
--- Request #10: New URL
-local DICT_URL = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
+-- Request #10: New URL (FIXED FORMAT)
+local DICT_URL = "https://raw.githubusercontent.com/rinjani999/yuyu99/main/tralala.txt"
 
-local function FetchWords()
-    local content = ""
-    local success, res = pcall(function() return game:HttpGet(DICT_URL) end)
-    
-    if success then
-        content = res
-    elseif isfile("WordHelper_Cache.txt") then
-        content = readfile("WordHelper_Cache.txt")
-    end
-
-    if success and writefile then
-        writefile("WordHelper_Cache.txt", content)
-    end
-
-    State.Words = {}
-    State.Buckets = {}
-    
-    for w in content:gmatch("[^\r\n]+") do
-        local clean = w:gsub("[%s%c]+", ""):lower()
-        if #clean > 0 then
-            table.insert(State.Words, clean)
-            local c = clean:sub(1,1)
-            State.Buckets[c] = State.Buckets[c] or {}
-            table.insert(State.Buckets[c], clean)
-        end
-    end
-end
+-- (FetchWords moved to bottom to access UI for status updates)
 
 -- Request #3: New Killer Logic
 local function GetKillerScore(word)
@@ -404,8 +378,6 @@ end
 -- Initialize
 LoadConfig()
 LoadLocalBlacklist()
--- Request #1: No startup code, auto fetch
-task.spawn(FetchWords)
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "WordHelperV5"
@@ -452,7 +424,7 @@ Title.TextXAlignment = Enum.TextXAlignment.Left
 
 -- Status
 local StatusLbl = Instance.new("TextLabel", MainFrame)
-StatusLbl.Text = "Idle..."
+StatusLbl.Text = "Loading Dictionary..." -- Default status
 StatusLbl.Size = UDim2.new(1, -30, 0, 20)
 StatusLbl.Position = UDim2.new(0, 15, 0, 40)
 StatusLbl.BackgroundTransparency = 1
@@ -637,6 +609,53 @@ RunService.RenderStepped:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
+-- FETCH & SPAWN
+--------------------------------------------------------------------------------
+
+local function FetchWords()
+    StatusLbl.Text = "Downloading Dictionary..."
+    StatusLbl.TextColor3 = THEME.Warning
+    
+    local content = ""
+    local success, res = pcall(function() return game:HttpGet(DICT_URL) end)
+    
+    if success then
+        content = res
+    elseif isfile("WordHelper_Cache.txt") then
+        content = readfile("WordHelper_Cache.txt")
+        StatusLbl.Text = "Using Cached Dictionary"
+    end
+
+    if success and writefile then
+        writefile("WordHelper_Cache.txt", content)
+    end
+
+    State.Words = {}
+    State.Buckets = {}
+    
+    for w in content:gmatch("[^\r\n]+") do
+        local clean = w:gsub("[%s%c]+", ""):lower()
+        if #clean > 0 then
+            table.insert(State.Words, clean)
+            local c = clean:sub(1,1)
+            State.Buckets[c] = State.Buckets[c] or {}
+            table.insert(State.Buckets[c], clean)
+        end
+    end
+    
+    if #State.Words > 0 then
+        StatusLbl.Text = "Ready! (" .. #State.Words .. " words)"
+        StatusLbl.TextColor3 = THEME.Success
+    else
+        StatusLbl.Text = "Failed to load words!"
+        StatusLbl.TextColor3 = THEME.Error
+    end
+end
+
+-- Start Fetching
+task.spawn(FetchWords)
+
+--------------------------------------------------------------------------------
 -- MAIN LOOPS & EVENTS
 --------------------------------------------------------------------------------
 
@@ -765,8 +784,10 @@ RunService.RenderStepped:Connect(function()
         StatusLbl.Text = "YOUR TURN! (" .. math.floor(seconds) .. "s)" .. (State.IsBlatantActive and " [PANIC]" or "")
         StatusLbl.TextColor3 = State.IsBlatantActive and THEME.Error or THEME.Success
     else
-        StatusLbl.Text = "Waiting..."
-        StatusLbl.TextColor3 = THEME.SubText
+        if StatusLbl.Text ~= "Downloading Dictionary..." and StatusLbl.Text ~= "Ready! (" .. #State.Words .. " words)" then
+            StatusLbl.Text = "Waiting..."
+            StatusLbl.TextColor3 = THEME.SubText
+        end
     end
 end)
 
