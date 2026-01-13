@@ -1,4 +1,3 @@
--- [FULL SCRIPT DENGAN PERBAIKAN SESUAI PERMINTAAN]
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
