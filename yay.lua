@@ -680,6 +680,29 @@ local function GenerateKeyboard()
 	space.FindFirstChild(space, "TextLabel").Text = "SPACE"
 end
 GenerateKeyboard()
+local function SetupSlider(btn, bg, fill, callback)
+	btn.MouseButton1Down:Connect(function()
+		local move, rel
+		local function Update()
+			local mousePos = UserInputService:GetMouseLocation()
+			local relX = math.clamp(mousePos.X - bg.AbsolutePosition.X, 0, bg.AbsoluteSize.X)
+			local pct = relX / bg.AbsoluteSize.X
+			callback(pct)
+			Config.CPM = currentCPM
+			Config.ErrorRate = errorRate
+			Config.ThinkDelay = thinkDelayCurrent
+		end
+		Update()
+		move = RunService.RenderStepped:Connect(Update)
+		rel = UserInputService.InputEnded:Connect(function(inp)
+			if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+				if move then move:Disconnect() move = nil end
+				if rel then rel:Disconnect() rel = nil end
+				SaveConfig()
+			end
+		end)
+	end)
+end
 local function CreateDropdown(parent, text, options, default, callback)
 	local container = Instance.new("Frame", parent)
 	container.Size = UDim2.new(0, 130, 0, 24)
