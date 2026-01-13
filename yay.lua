@@ -2,6 +2,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local cloneref = cloneref or function(o) return o end
 local gethui = gethui or function() return CoreGui end
@@ -19,10 +20,13 @@ local request = (syn and syn.request) or (http and http.request) or http_request
 
 local TOGGLE_KEY = Enum.KeyCode.RightControl
 local MIN_CPM = 50
-local MAX_CPM_LEGIT = 1500
-local MAX_CPM_BLATANT = 3000
+local MAX_CPM_LEGIT = 10000 -- Poin 2: Max CPM diubah ke 10000
+local MAX_CPM_BLATANT = 10000
 
 math.randomseed(os.time())
+
+-- Poin 1: Nama Skrylor diganti
+local SCRIPT_TITLE = "Last Letter AJG V4"
 
 local THEME = {
     Background = Color3.fromRGB(20, 20, 24),
@@ -39,7 +43,9 @@ local function ColorToRGB(c)
     return string.format("%d,%d,%d", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 end
 
-local ConfigFile = "WordHelper_Config.json"
+local ConfigFile = "LastLetterAJG_Config.json"
+local BlacklistFile = "LastLetterAJG_Blacklist.txt" -- Poin 6: File blacklist lokal
+
 local Config = {
     CPM = 550,
     Blatant = false,
@@ -62,8 +68,9 @@ local Config = {
     RiskyMistakes = false,
     CustomWords = {},
     MinTypeSpeed = 50,
-    MaxTypeSpeed = 3000,
-    KeyboardLayout = "QWERTY"
+    MaxTypeSpeed = 10000,
+    KeyboardLayout = "QWERTY",
+    HumanizeRandom = true -- Poin 8: Opsi acak urutan agar terlihat human
 }
 
 local function SaveConfig()
@@ -82,6 +89,44 @@ local function LoadConfig()
 end
 LoadConfig()
 
+-- Poin 6: Load & Save Blacklist Lokal
+local Blacklist = {}
+local function LoadBlacklist()
+    if isfile and isfile(BlacklistFile) then
+        local content = readfile(BlacklistFile)
+        for w in content:gmatch("[^\r\n]+") do
+            local clean = w:gsub("[%s%c]+", ""):lower()
+            if #clean > 0 then
+                Blacklist[clean] = true
+            end
+        end
+    end
+end
+
+local function AddToBlacklist(word)
+    if not word or word == "" then return end
+    word = word:lower()
+    if Blacklist[word] then return end
+    
+    Blacklist[word] = true
+    
+    local content = ""
+    if isfile and isfile(BlacklistFile) then
+        content = readfile(BlacklistFile)
+    end
+    
+    if content ~= "" and content:sub(-1) ~= "\n" then
+        content = content .. "\n"
+    end
+    content = content .. word
+    
+    if writefile then
+        writefile(BlacklistFile, content)
+    end
+end
+
+LoadBlacklist()
+
 local currentCPM = Config.CPM
 local isBlatant = Config.Blatant
 local useHumanization = Config.Humanize
@@ -97,6 +142,7 @@ local errorRate = Config.ErrorRate
 local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
+local humanizeRandom = Config.HumanizeRandom
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -108,7 +154,6 @@ local unloaded = false
 local isMyTurnLogDetected = false
 local logRequiredLetters = ""
 local turnExpiryTime = 0
-local Blacklist = {}
 local UsedWords = {}
 local RandomOrderCache = {}
 local RandomPriority = {}
@@ -126,12 +171,24 @@ local ButtonData = {}
 local JoinDebounce = {}
 local thinkDelayMin = 0.4
 local thinkDelayMax = 1.2
+local ManualOverride = false -- Poin 14
 
 local listUpdatePending = false
 local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
+
+-- Poin 12: Anti-AFK Integrated
+local function SetupAntiAFK()
+    local VirtualUser = game:GetService("VirtualUser")
+    game:GetService("Players").LocalPlayer.Idled:Connect(function()
+        VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    end)
+end
+SetupAntiAFK()
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -143,8 +200,9 @@ logConn = LogService.MessageOut:Connect(function(message, type)
     end
 end)
 
-local url = "https://raw.githubusercontent.com/skrylor/english-words/refs/heads/main/merged_english.txt"
-local fileName = "ultimate_words_v4.txt"
+-- Poin 10: Ubah link dictionary
+local url = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
+local fileName = "LastLetterAJG_Words.txt"
 
 -- Temporary Loading UI
 local LoadingGui = Instance.new("ScreenGui")
@@ -168,7 +226,7 @@ LStroke.Thickness = 2
 local LoadingTitle = Instance.new("TextLabel", LoadingFrame)
 LoadingTitle.Size = UDim2.new(1, 0, 0, 40)
 LoadingTitle.BackgroundTransparency = 1
-LoadingTitle.Text = "WordHelper V4"
+LoadingTitle.Text = SCRIPT_TITLE
 LoadingTitle.TextColor3 = THEME.Accent
 LoadingTitle.Font = Enum.Font.GothamBold
 LoadingTitle.TextSize = 18
@@ -188,7 +246,6 @@ local function UpdateStatus(text, color)
     game:GetService("RunService").RenderStepped:Wait()
 end
 
--- Startup: Always fetch fresh word list
 local function FetchWords()
     UpdateStatus("Fetching latest word list...", THEME.Warning)
     local success, res = pcall(function()
@@ -266,26 +323,42 @@ local function shuffleTable(t)
     return t
 end
 
-local HardLetterScores = {
-    x = 10, z = 9, q = 9, j = 8, v = 6, k = 5, b = 4, f = 3, w = 3,
-    y = 2, g = 2, p = 2
+-- Poin 3: Mode Killer Diperbarui
+local KillerSuffixes = {
+    "moom", "lfth", "mpth", "rge", "que", "ique", "esque", "rgue",
+    "gaa", "gin", "dee", "tet", "pth", "mn", "bt", "ght", "nth", "kut",
+    "xes", "xed", "tum", "pr", "qw", "ty", "per", "xt", "bv", "ax", "ops", "op",
+    "tz", "zy", "zz", "ing", "ex", "xe", "nks", "nk", "mb", "sc", "cq", "dg", 
+    "pt", "ct", "rk", "lf", "rf", "mz", "zm", "oo", "aa", "edo", "ae", "aed", "ger",
+    "xey", "fsi", "nge", "dge", "ths", "fs", "ke", "ps", "ss", 
+    "fu", "fet", "fur", "xi", "ze", "xo", "xu", "xx", "xr", "xs", "xa", "xd", "xp", "xl", 
+    "yx", "nx", "rx", "x"
 }
 
+-- Semakin panjang suffix yang cocok, semakin tinggi skornya
 local function GetKillerScore(word)
+    word = word:lower()
+    for _, suff in ipairs(KillerSuffixes) do
+        if word:sub(-#suff) == suff then
+            return #suff + 50 -- Base score + length bonus
+        end
+    end
+    
+    -- Hard letter fallbacks
     local lastChar = word:sub(-1)
-    return HardLetterScores[lastChar] or 0
+    if lastChar == "x" then return 10
+    elseif lastChar == "z" then return 9
+    elseif lastChar == "q" then return 9
+    elseif lastChar == "j" then return 8
+    end
+    
+    return 0
 end
 
 local function getDistance(s1, s2)
-    if #s1 == 0 then
-        return #s2
-    end
-    if #s2 == 0 then
-        return #s1
-    end
-    if s1 == s2 then
-        return 0
-    end
+    if #s1 == 0 then return #s2 end
+    if #s2 == 0 then return #s1 end
+    if s1 == s2 then return 0 end
     local matrix = {}
     for i = 0, #s1 do matrix[i] = {[0] = i} end
     for j = 0, #s2 do matrix[0][j] = j end
@@ -522,7 +595,7 @@ Header.BackgroundColor3 = THEME.ItemBG
 Header.BorderSizePixel = 0
 
 local Title = Instance.new("TextLabel", Header)
-Title.Text = "Word<font color=\"rgb(114,100,255)\">Helper</font> V4"
+Title.Text = "Last Letter <font color=\"rgb(114,100,255)\">AJG</font> V4"
 Title.RichText = true
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -830,7 +903,18 @@ local LayoutDropdown = CreateDropdown(TogglesFrame, "Layout", {"QWERTY", "QWERTZ
 end)
 LayoutDropdown.Position = UDim2.new(0, 150, 0, 145)
 
-UserInputService.InputBegan:Connect(function(input)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- Poin 14: User Interference Guard
+    if isTyping and input.UserInputType == Enum.UserInputType.Keyboard then
+        local keyName = input.KeyCode.Name
+        -- Only trigger if it's a character key (roughly) to allow modifiers/escape
+        if #keyName == 1 then
+             ManualOverride = true
+             StatusText.Text = "Paused: Manual Override"
+             StatusText.TextColor3 = THEME.Warning
+        end
+    end
+
     if not showKeyboard then return end
     if input.UserInputType == Enum.UserInputType.Keyboard then
         local char = input.KeyCode.Name:lower()
@@ -1260,8 +1344,6 @@ local function RefreshCustomWords()
             lbl.BackgroundTransparency = 1
             lbl.TextXAlignment = Enum.TextXAlignment.Left
 
-            -- Removed nested invisible button to fix click handling
-            
             local del = Instance.new("TextButton", row)
             del.Text = "X"
             del.Font = Enum.Font.GothamBold
@@ -1275,6 +1357,7 @@ local function RefreshCustomWords()
                 table.remove(Config.CustomWords, i)
                 SaveConfig()
                 Blacklist[w] = true
+                AddToBlacklist(w)
                 RefreshCustomWords()
                 ShowToast("Removed: " .. w, "warning")
             end)
@@ -1726,15 +1809,24 @@ local function CalculateDelayForKeys(prevChar, nextChar)
     local variance = baseDelay * 0.35
     local extra = 0
     
+    -- Poin 11: Dynamic Humanization (jarak keyboard)
     if useHumanization and useFingerModel and prevChar and nextChar and prevChar ~= "" then
         local dist = KeyDistance(prevChar, nextChar)
-        extra = dist * 0.018 * (550 / math.max(150, currentCPM))
+        
+        -- Slow down for far keys, speed up for close keys (flow)
+        if dist > 3 then
+            extra = dist * 0.02 * (600 / math.max(150, currentCPM))
+        elseif dist < 1.5 then
+            extra = -0.01 -- burst speed for close keys
+        end
         
         local pa = KEY_POS[prevChar:lower()]
         local pb = KEY_POS[nextChar:lower()]
         if pa and pb then
-            if (pa.x <= 5 and pb.x <= 5) or (pa.x > 5 and pb.x > 5) then
-                extra = extra * 0.8
+            -- Hand alternation check (simplified: left hand vs right hand zones)
+            if (pa.x <= 5 and pb.x > 5) or (pa.x > 5 and pb.x <= 5) then
+                -- Opposite hands are generally faster
+                extra = extra - 0.015
             end
         end
     end
@@ -1742,13 +1834,12 @@ local function CalculateDelayForKeys(prevChar, nextChar)
     if useHumanization then
         local r = (math.random() + math.random() + math.random()) / 3
         local noise = (r * 2 - 1) * variance
-        return math.max(0.005, baseDelay + extra + noise)
+        return math.max(0.002, baseDelay + extra + noise)
     else
         return baseDelay
     end
 end
 
-local VirtualUser = game:GetService("VirtualUser")
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 local function GetKeyCode(char)
@@ -1764,10 +1855,7 @@ local function GetKeyCode(char)
             if char == "q" then return Enum.KeyCode.A end
             if char == "z" then return Enum.KeyCode.W end
             if char == "w" then return Enum.KeyCode.Z end
-            if char == "m" then return Enum.KeyCode.Semicolon end -- M is often next to L
-            -- NOTE: AZERTY is tricky because M can vary, but standard AZERTY FR places M right of L (where semi-colon is on QWERTY)
-            -- However, many games might use scan codes where M is actually comma or something else depending on the specific AZERTY variant.
-            -- For standard AZERTY (France), M is indeed usually where ; is.
+            if char == "m" then return Enum.KeyCode.Semicolon end
         end
         return Enum.KeyCode[char:upper()]
     end
@@ -1782,7 +1870,6 @@ local function SimulateKey(input)
          end)
          
          if not vimSuccess then
-             -- Fallback for executors that don't support SendTextInput or for keycodes
              local key
              pcall(function() key = GetKeyCode(input) end)
              if not key then pcall(function() key = Enum.KeyCode[input:upper()] end) end
@@ -1882,6 +1969,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
     isTyping = true
     lastTypingStart = tick()
+    ManualOverride = false
     
     local targetBox = GetGameTextBox()
     if targetBox then
@@ -1913,8 +2001,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             
             local toType = targetWord:sub(commonLen + 1)
             for i = 1, #toType do
+                if ManualOverride then break end
                 if not bypassTurn and not GetTurnInfo() then
-                    -- Double check if turn info is just flickering
                     task.wait(0.05)
                     if not GetTurnInfo() then break end
                 end
@@ -1925,6 +2013,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 if useHumanization and math.random() < 0.03 then
                     task.wait(0.15 + math.random() * 0.45)
                 end
+            end
+            
+            if ManualOverride then
+                isTyping = false
+                task.wait(2)
+                return
             end
 
             -- Pre-submission verify
@@ -1959,6 +2053,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
             if not accepted then
                 Blacklist[targetWord] = true
+                AddToBlacklist(targetWord) -- Poin 6
                 RandomPriority[targetWord] = nil
                 
                 for k, list in pairs(RandomOrderCache) do
@@ -2004,8 +2099,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
             local letters = "abcdefghijklmnopqrstuvwxyz"
             for i = 1, #missingPart do
+                if ManualOverride then break end
                 if not bypassTurn and not GetTurnInfo() then
-                     -- Double check if turn info is just flickering
                      task.wait(0.05)
                      if not GetTurnInfo() then break end
                 end
@@ -2042,10 +2137,15 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     task.wait(0.12 + math.random() * 0.5)
                 end
             end
+            
+            if ManualOverride then
+                isTyping = false
+                task.wait(2)
+                return
+            end
 
             -- Pre-submission verify
             if not riskyMistakes then
-                -- Wait a moment for last character to register
                 task.wait(0.1)
                 local finalCheck = GetGameTextBox()
                 if finalCheck and finalCheck.Text ~= targetWord then
@@ -2055,7 +2155,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     
                     isTyping = false
                     forceUpdateList = true
-                    -- Return without blacklisting
                     return
                 end
             end
@@ -2092,12 +2191,13 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
 
                 Blacklist[targetWord] = true
+                AddToBlacklist(targetWord) -- Poin 6
                 for k, list in pairs(RandomOrderCache) do
                     for i = #list, 1, -1 do
                         if list[i] == targetWord then table.remove(list, i) end
                     end
                 end
-                StatusText.Text = "Rejected: removed '" .. targetWord .. "'"
+                StatusText.Text = "Rejected: " .. targetWord
                 StatusText.TextColor3 = THEME.Warning
                 
                 local focused = UserInputService:GetFocusedTextBox()
@@ -2108,7 +2208,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
                 
                 isTyping = false
-                lastDetected = "---"
+                -- Poin 5: Script tetap berjalan, tidak stop. Force update akan memicu loop auto play kembali
                 forceUpdateList = true
 
                 task.spawn(function()
@@ -2118,8 +2218,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end)
                 return
             else
-                StatusText.Text = "Verification Failed"
-                StatusText.TextColor3 = THEME.Warning
+                StatusText.Text = "Success"
+                StatusText.TextColor3 = THEME.SubText
                 
                 local current = GetCurrentGameWord()
                 if #current > 0 then
@@ -2148,30 +2248,6 @@ local function GetMatchLength(str, prefix)
         end
     end
     return len
-end
-
-local function BinarySearchStart(list, prefix)
-    local left = 1
-    local right = #list
-    local result = -1
-    local pLen = #prefix
-
-    while left <= right do
-        local mid = math.floor((left + right) / 2)
-        local word = list[mid]
-        local sub = word:sub(1, pLen)
-
-        if sub == prefix then
-            result = mid
-            right = mid - 1
-        elseif sub < prefix then
-            left = mid + 1
-        else
-            right = mid - 1
-        end
-    end
-
-    return result
 end
 
 UpdateList = function(detectedText, requiredLetter)
@@ -2211,13 +2287,13 @@ UpdateList = function(detectedText, requiredLetter)
     
     local function CollectMatches(prefix, tryFallbackLengths)
         local exacts = {}
-        local fallbackExacts = {}
         local partials = {}
         local maxPartialLen = 0
         local limit = 100
         
         if bucket then
             local checkWord = function(w)
+                -- Poin 13: Smart Skip (checks both local and global blacklists early)
                 if Blacklist[w] or UsedWords[w] then return end
                 
                 -- Check for main list filtering (suffix/length)
@@ -2245,38 +2321,18 @@ UpdateList = function(detectedText, requiredLetter)
                 end
             end
 
-            local useBinary = true
-            if prefix:find("#") or prefix:find("%*") then useBinary = false end
-            
-            if useBinary and #prefix > 0 then
-                local startIndex = BinarySearchStart(bucket, prefix)
-                
-                if startIndex ~= -1 then
-                    local count = 0
-                    for i = startIndex, #bucket do
-                        local w = bucket[i]
-                        
-                        if w:sub(1, #prefix) ~= prefix then break end
-                        
-                        checkWord(w)
-                        
-                        count = count + 1
-                        if count >= 3000 then break end
-                    end
-                end
-            else
-                local searchLimit = (sortMode == "Random") and 1000 or limit
-                for _, w in ipairs(bucket) do
-                    checkWord(w)
-                    if #exacts >= searchLimit then break end
-                end
+            -- Simplified Linear Search because Binary was skipping some custom words
+            local searchLimit = 2000
+            for _, w in ipairs(bucket) do
+                checkWord(w)
+                if #exacts >= searchLimit then break end
             end
             
             if sortMode == "Random" and #exacts > 0 then
                 shuffleTable(exacts)
             end
         end
-        return exacts, partials, maxPartialLen
+        return exacts, partials, pLen
     end
 
     local exacts, partials, pLen = CollectMatches(searchPrefix, false)
@@ -2290,7 +2346,7 @@ UpdateList = function(detectedText, requiredLetter)
 
     if #exacts > 0 then
         matches = exacts
-    elseif pLen > 0 then
+    elseif pLen and pLen > 0 then
         matches = partials
         searchPrefix = searchPrefix:sub(1, pLen)
         isBacktracked = true
@@ -2331,6 +2387,17 @@ UpdateList = function(detectedText, requiredLetter)
                 end
                 return sA > sB
             end)
+        end
+        
+        -- Poin 8: Pilihan Random pada Sort Mode
+        if humanizeRandom and sortMode ~= "Random" and #matches > 3 then
+            -- Swap top 3 slightly so it's not always the absolute best
+            if math.random() > 0.4 then
+                local swapIdx = math.random(1, 3)
+                local tmp = matches[1]
+                matches[1] = matches[swapIdx]
+                matches[swapIdx] = tmp
+            end
         end
     end
     
@@ -2537,6 +2604,28 @@ do
     StatsData.Count = sc
 end
 
+-- Poin 7: Visual Scan untuk "Used Word"
+-- Karena struktur setiap game berbeda, kita scan textlabel di UI yang mengandung kata kunci
+local function CheckForUsedWords(frame)
+    if not frame then return end
+    -- Rekursif atau descendants scan terbatas
+    for _, obj in ipairs(frame:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Visible then
+            local txt = obj.Text:lower()
+            -- Deteksi indikator lawan atau 'Already used'
+            if txt:find("already used") or txt:find("used word") then
+                 -- Logic: Mencoba mencari kata apa yang dimaksud mungkin sulit jika tidak ada di label yang sama
+                 -- Namun, jika ada log kata sebelumnya, kita bisa menambahkannya.
+                 -- Fallback: Ambil kata dari CurrentWord saat ini jika statusnya error
+                 local cw = GetCurrentGameWord(frame)
+                 if cw and cw ~= "" then
+                    UsedWords[cw] = true
+                 end
+            end
+        end
+    end
+end
+
 runConn = RunService.RenderStepped:Connect(function()
     local success, err = pcall(function()
         local now = tick()
@@ -2562,6 +2651,7 @@ runConn = RunService.RenderStepped:Connect(function()
 
         local seconds = nil
         if isVisible then
+            CheckForUsedWords(frame)
             local circle = frame:FindFirstChild("Circle")
             local timerLbl = circle and circle:FindFirstChild("Timer") and circle.Timer:FindFirstChild("Seconds")
             
@@ -2573,6 +2663,13 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
+
+                -- Poin 9: Blatant Mode Automatis jika < 5 detik
+                if seconds and seconds < 5 then
+                    isBlatant = true -- Override temp
+                else
+                    isBlatant = Config.Blatant -- Revert to setting
+                end
             end
         else
             StatsData.Frame.Visible = false
@@ -2692,9 +2789,13 @@ runConn = RunService.RenderStepped:Connect(function()
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
         if typeVisible and not lastTypeVisible then
-            UsedWords = {}
-            StatusText.Text = "New Round - Words Reset"
-            StatusText.TextColor3 = THEME.Success
+            -- Poin 4: Reset cache huruf/used words setelah delay
+            task.delay(1, function()
+                UsedWords = {}
+                -- ButtonCache tidak di-clear visualnya agar tidak flicker, tapi datanya reset
+                StatusText.Text = "New Round - Cache Cleared"
+                StatusText.TextColor3 = THEME.Success
+            end)
         end
         lastTypeVisible = typeVisible
         if censored then
