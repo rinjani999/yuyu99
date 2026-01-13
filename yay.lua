@@ -1183,19 +1183,37 @@ BlacklistBtn.Size = UDim2.new(0, 265, 0, 24)
 BlacklistBtn.Position = UDim2.new(0, 15, 0, 235) 
 Instance.new("UICorner", BlacklistBtn).CornerRadius = UDim.new(0, 4)
 
+-- LOGIKA TOMBOL YANG LEBIH KUAT (ANTI-NIL)
 BlacklistBtn.MouseButton1Click:Connect(function()
-    -- Menggunakan pcall untuk menangkap error jika ada
-    local s, e = pcall(function()
-        BlacklistFrame.Visible = not BlacklistFrame.Visible
-        if BlacklistFrame.Visible then
-            -- Pastikan frame ditarik ke depan ScreenGui
-            if ScreenGui then BlacklistFrame.Parent = ScreenGui end
-            RefreshBlacklistUI()
+    -- 1. Cari frame secara manual menggunakan nama, bukan variabel lokal
+    -- Ini mencegah error "index nil" jika variabel lokal tidak terbaca
+    local targetFrame = ScreenGui:FindFirstChild("BlacklistManager")
+    
+    -- Jika tidak ketemu di ScreenGui, coba cari di MainFrame (sebagai backup)
+    if not targetFrame and MainFrame then
+        targetFrame = MainFrame.Parent:FindFirstChild("BlacklistManager")
+    end
+
+    if targetFrame then
+        -- 2. Toggle Visibility
+        targetFrame.Visible = not targetFrame.Visible
+        
+        -- 3. Bawa ke lapisan paling depan (agar tidak tertutup)
+        targetFrame.Parent = ScreenGui 
+        
+        -- 4. Refresh isi list jika jendela terbuka
+        if targetFrame.Visible then
+            -- Kita bungkus Refresh dalam pcall agar jika ada error lain, script tidak macet
+            pcall(function()
+                RefreshBlacklistUI()
+            end)
         end
-    end)
-    if not s then 
-        warn("Gagal membuka Blacklist Manager: " .. tostring(e)) 
-        if ShowToast then ShowToast("Error GUI (Cek Console F9)", "error") end
+    else
+        -- Error Handling: Jika frame benar-benar hilang
+        warn("CRITICAL ERROR: Jendela 'BlacklistManager' tidak ditemukan di dalam ScreenGui!")
+        if ShowToast then 
+            ShowToast("Error: UI Frame Missing (Re-execute Script)", "error") 
+        end
     end
 end)
 -- === AKHIR KODE PERBAIKAN ===
