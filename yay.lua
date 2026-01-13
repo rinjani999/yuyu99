@@ -1,4 +1,4 @@
--- [Word Helper - Last Letter AJG V4 - OPTIMIZED LIGHT VERSION]
+-- [Word Helper - Last Letter AJG V4 - LIGHT + FULL FEATURES]
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -11,12 +11,12 @@ local request = (syn and syn.request) or (http and http.request) or http_request
 
 local TOGGLE_KEY = Enum.KeyCode.RightControl
 local MIN_CPM = 50
-local MAX_CPM_LEGIT = 10000  -- Dinaikkan sesuai permintaan
+local MAX_CPM_LEGIT = 10000
 local MAX_CPM_BLATANT = 10000
 
 math.randomseed(os.time())
 
--- THEME SEDERHANA
+-- THEME
 local THEME = {
 	Background = Color3.fromRGB(20, 20, 24),
 	ItemBG = Color3.fromRGB(30, 30, 36),
@@ -55,7 +55,7 @@ local Config = {
 	KeyboardLayout = "QWERTY"
 }
 
--- Killer suffixes
+-- KILLER SUFFIXES
 local KillerSuffixes = {
 	"x", "xi", "ze", "xo", "xu", "xx", "xr", "xs", "xey", "xa", "xd", "xp", "xl",
 	"fu", "fet", "fur", "ke", "ps", "ss", "ths", "fs", "fsi",
@@ -84,7 +84,7 @@ end
 
 LoadConfig()
 
--- BLACKLIST PERSISTENT
+-- BLACKLIST
 local Blacklist = {}
 local function LoadBlacklist()
 	if isfile and isfile(BlacklistFile) then
@@ -119,7 +119,7 @@ local currentCPM = Config.CPM
 local isBlatant = Config.Blatant
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
-local sortMode = Config.SortMode
+local sortMode = Config.SortMode or "Random"
 local randomizeTop = Config.RandomizeTop or false
 local suffixMode = Config.SuffixMode or ""
 local lengthMode = Config.LengthMode or 0
@@ -156,6 +156,7 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
+local lastTypeVisible = false
 
 -- LOG DETECTION
 if logConn then logConn:Disconnect() end
@@ -331,7 +332,7 @@ ScreenGui.Parent = ParentTarget
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.ResetOnSpawn = false
 
--- TOAST SYSTEM
+-- TOAST
 local ToastContainer = Instance.new("Frame", ScreenGui)
 ToastContainer.Name = "ToastContainer"
 ToastContainer.Size = UDim2.new(0, 300, 1, 0)
@@ -370,7 +371,7 @@ end
 
 -- MAIN FRAME
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 280, 0, 420)
+MainFrame.Size = UDim2.new(0, 280, 0, 460)
 MainFrame.Position = UDim2.new(0.8, -50, 0.4, 0)
 MainFrame.BackgroundColor3 = THEME.Background
 MainFrame.BorderSizePixel = 0
@@ -489,10 +490,55 @@ UIListLayout.Padding = UDim.new(0, 3)
 local ButtonCache = {}
 local ButtonData = {}
 
+-- SORT MODE DROPDOWN
+local SortModeDropdown = Instance.new("TextButton", MainFrame)
+SortModeDropdown.Size = UDim2.new(1, -20, 0, 24)
+SortModeDropdown.Position = UDim2.new(0, 10, 0, 280)
+SortModeDropdown.BackgroundColor3 = THEME.ItemBG
+SortModeDropdown.Font = Enum.Font.Gotham
+SortModeDropdown.TextSize = 13
+SortModeDropdown.TextColor3 = THEME.Text
+SortModeDropdown.Text = "Sort: " .. sortMode
+SortModeDropdown.AutoButtonColor = false
+
+local SortOptions = {"Random", "Longest", "Shortest", "Killer"}
+SortModeDropdown.MouseButton1Click:Connect(function()
+	local menu = Instance.new("Frame")
+	menu.Size = UDim2.new(1, 0, 0, #SortOptions * 24)
+	menu.Position = UDim2.new(0, 0, 1, 0)
+	menu.BackgroundColor3 = THEME.ItemBG
+	menu.BorderSizePixel = 0
+	menu.Parent = SortModeDropdown
+	Instance.new("UICorner", menu).CornerRadius = UDim.new(0, 4)
+	for i, opt in ipairs(SortOptions) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 0, 24)
+		btn.Position = UDim2.new(0, 0, 0, (i-1)*24)
+		btn.Text = opt
+		btn.Font = Enum.Font.Gotham
+		btn.TextSize = 13
+		btn.TextColor3 = THEME.Text
+		btn.BackgroundColor3 = (opt == sortMode) and THEME.Accent or THEME.ItemBG
+		btn.AutoButtonColor = false
+		btn.MouseButton1Click:Connect(function()
+			sortMode = opt
+			Config.SortMode = sortMode
+			SortModeDropdown.Text = "Sort: " .. sortMode
+			SaveConfig()
+			UpdateList(lastDetected, lastRequiredLetter)
+			menu:Destroy()
+		end)
+		btn.Parent = menu
+	end
+	task.delay(3, function()
+		if menu and menu.Parent then menu:Destroy() end
+	end)
+end)
+
 -- SETTINGS COLLAPSE
 local SettingsFrame = Instance.new("Frame", MainFrame)
-SettingsFrame.Size = UDim2.new(1, 0, 0, 120)
-SettingsFrame.Position = UDim2.new(0, 0, 1, -120)
+SettingsFrame.Size = UDim2.new(1, 0, 0, 140)
+SettingsFrame.Position = UDim2.new(0, 0, 1, -140)
 SettingsFrame.BackgroundColor3 = THEME.ItemBG
 SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
@@ -500,10 +546,10 @@ SettingsFrame.ClipsDescendants = true
 local settingsCollapsed = true
 local function UpdateLayout()
 	if settingsCollapsed then
-		Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 120), Position = UDim2.new(0, 0, 1, -120)}, 0.2)
+		Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 140), Position = UDim2.new(0, 0, 1, -140)}, 0.2)
 		Tween(ScrollList, {Size = UDim2.new(1, -20, 0, 180)}, 0.2)
 	else
-		Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 220), Position = UDim2.new(0, 0, 1, -220)}, 0.2)
+		Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 240), Position = UDim2.new(0, 0, 1, -240)}, 0.2)
 		Tween(ScrollList, {Size = UDim2.new(1, -20, 0, 80)}, 0.2)
 	end
 end
@@ -615,7 +661,7 @@ end)
 
 -- TOGGLES
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
-TogglesFrame.Size = UDim2.new(1, 0, 0, 80)
+TogglesFrame.Size = UDim2.new(1, 0, 0, 100)
 TogglesFrame.Position = UDim2.new(0, 0, 0, 55)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
@@ -875,7 +921,6 @@ local function RefreshBlacklist()
 		del.BackgroundTransparency = 1
 		del.MouseButton1Click:Connect(function()
 			Blacklist[word] = nil
-			-- Remove from file
 			local lines = {}
 			if isfile(BlacklistFile) then
 				for w in readfile(BlacklistFile):gmatch("[^\r\n]+") do
@@ -894,7 +939,7 @@ BlacklistBtn.MouseButton1Click:Connect(function()
 	if BlacklistFrame.Visible then RefreshBlacklist() end
 end)
 
--- WORD BROWSER (MINIMAL)
+-- WORD BROWSER
 do
 	local WordBrowserFrame = Instance.new("Frame", ScreenGui)
 	WordBrowserFrame.Name = "WordBrowser"
@@ -1016,6 +1061,8 @@ UpdateList = function(detectedText, requiredLetter)
 				if not aKiller and bKiller then return false end
 				return #a < #b
 			end)
+		elseif sortMode == "Random" then
+			shuffleTable(matches)
 		end
 
 		if (sortMode == "Longest" or sortMode == "Shortest" or sortMode == "Killer") and randomizeTop and #matches > 1 then
@@ -1080,7 +1127,7 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 	UpdateList(lastDetected, lastRequiredLetter)
 end)
 
--- SMART TYPE (MINIMAL)
+-- SMART TYPE
 local function SmartType(targetWord, currentDetected, isCorrection)
 	if isTyping or unloaded then return end
 	isTyping = true
@@ -1116,7 +1163,7 @@ runConn = RunService.RenderStepped:Connect(function()
 		UpdateList(detected, requiredLetter)
 	end
 
-	-- Auto clear on new round
+	-- Auto clear on new round start
 	local typeLbl = frame:FindFirstChild("Type")
 	local typeVisible = typeLbl and typeLbl.Visible
 	if typeVisible and not (lastTypeVisible or false) then
