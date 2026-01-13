@@ -59,8 +59,7 @@ local Config = {
 	MaxTypeSpeed = 3000,
 	KeyboardLayout = "QWERTY"
 }
-
--- Killer Suffixes
+-- Killer Mode Suffixes List
 local KillerSuffixes = {
 	"x", "xi", "ze", "xo", "xu", "xx", "xr", "xs", "xey", "xa", "xd", "xp", "xl",
 	"fu", "fet", "fur", "ke", "ps", "ss", "ths", "fs", "fsi",
@@ -73,13 +72,11 @@ local KillerSuffixes = {
 	"nth", "rgue", "mb", "sc", "cq", "dg", "pt", "ct", "x", "rk", "lf", "rf", "mz", "zm",
 	"oo", "aa", "edo", "ae", "aed", "ger", "moom"
 }
-
 local function SaveConfig()
 	if writefile then
 		writefile(ConfigFile, HttpService:JSONEncode(Config))
 	end
 end
-
 local function LoadConfig()
 	if isfile and isfile(ConfigFile) then
 		local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
@@ -88,10 +85,8 @@ local function LoadConfig()
 		end
 	end
 end
-
 LoadConfig()
-
--- Persistent Blacklist
+-- Persistent Blacklist Logic
 local Blacklist = {}
 local function LoadBlacklist()
 	if isfile and isfile(BlacklistFile) then
@@ -104,7 +99,6 @@ local function LoadBlacklist()
 		end
 	end
 end
-
 local function AddToBlacklist(word)
 	if not word or word == "" then return end
 	word = word:lower()
@@ -119,9 +113,19 @@ local function AddToBlacklist(word)
 		end
 	end
 end
-
+local function RemoveFromBlacklist(word)
+	if not word or not Blacklist[word] then return end
+	Blacklist[word] = nil
+	-- Rewrite entire file
+	local newContent = {}
+	for w in pairs(Blacklist) do
+		table.insert(newContent, w)
+	end
+	if writefile then
+		writefile(BlacklistFile, table.concat(newContent, "\n"))
+	end
+end
 LoadBlacklist()
-
 local currentCPM = Config.CPM
 local isBlatant = Config.Blatant
 local useHumanization = Config.Humanize
@@ -138,7 +142,6 @@ local errorRate = Config.ErrorRate
 local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
-
 local isTyping = false
 local isAutoPlayScheduled = false
 local lastTypingStart = 0
@@ -164,17 +167,14 @@ local UpdateList
 local ButtonCache = {}
 local ButtonData = {}
 local JoinDebounce = {}
-
--- Think delay range: 0.1 - 2.0
+-- Updated Think Delay Range
 local thinkDelayMin = 0.1
 local thinkDelayMax = 2.0
-
 local listUpdatePending = false
 local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
-
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
 	local wordPart, timePart = message:match("Word:%s*([A-Za-z]+)%s+Time to respond:%s*(%d+)")
@@ -184,17 +184,16 @@ logConn = LogService.MessageOut:Connect(function(message, type)
 		turnExpiryTime = tick() + tonumber(timePart)
 	end
 end)
-
+-- Updated URL 1
 local url = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
 local fileName = "ultimate_words_v4.txt"
-
+-- Temporary Loading UI
 local LoadingGui = Instance.new("ScreenGui")
 LoadingGui.Name = "WordHelperLoading"
 local success, parent = pcall(function() return gethui() end)
 if not success or not parent then parent = game:GetService("CoreGui") end
 LoadingGui.Parent = parent
 LoadingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
 local LoadingFrame = Instance.new("Frame", LoadingGui)
 LoadingFrame.Size = UDim2.new(0, 300, 0, 100)
 LoadingFrame.Position = UDim2.new(0.5, -150, 0.4, 0)
@@ -205,7 +204,6 @@ local LStroke = Instance.new("UIStroke", LoadingFrame)
 LStroke.Color = THEME.Accent
 LStroke.Transparency = 0.5
 LStroke.Thickness = 2
-
 local LoadingTitle = Instance.new("TextLabel", LoadingFrame)
 LoadingTitle.Size = UDim2.new(1, 0, 0, 40)
 LoadingTitle.BackgroundTransparency = 1
@@ -213,7 +211,6 @@ LoadingTitle.Text = "Last Letter AJG V4"
 LoadingTitle.TextColor3 = THEME.Accent
 LoadingTitle.Font = Enum.Font.GothamBold
 LoadingTitle.TextSize = 18
-
 local LoadingStatus = Instance.new("TextLabel", LoadingFrame)
 LoadingStatus.Size = UDim2.new(1, -20, 0, 30)
 LoadingStatus.Position = UDim2.new(0, 10, 0, 50)
@@ -222,13 +219,12 @@ LoadingStatus.Text = "Initializing..."
 LoadingStatus.TextColor3 = THEME.Text
 LoadingStatus.Font = Enum.Font.Gotham
 LoadingStatus.TextSize = 14
-
 local function UpdateStatus(text, color)
 	LoadingStatus.Text = text
 	if color then LoadingStatus.TextColor3 = color end
 	game:GetService("RunService").RenderStepped:Wait()
 end
-
+-- Startup: Always fetch fresh word list
 local function FetchWords()
 	UpdateStatus("Fetching latest word list...", THEME.Warning)
 	local success, res = pcall(function()
@@ -242,12 +238,9 @@ local function FetchWords()
 	end
 	task.wait(0.5)
 end
-
 FetchWords()
-
 local Words = {}
 local SeenWords = {}
-
 local function LoadList(fname)
 	UpdateStatus("Parsing word list...", THEME.Warning)
 	if isfile(fname) then
@@ -265,11 +258,9 @@ local function LoadList(fname)
 	end
 	task.wait(1)
 end
-
 LoadList(fileName)
 if LoadingGui then LoadingGui:Destroy() end
 table.sort(Words)
-
 Buckets = {}
 for _, w in ipairs(Words) do
 	local c = w:sub(1,1) or ""
@@ -277,7 +268,6 @@ for _, w in ipairs(Words) do
 	Buckets[c] = Buckets[c] or {}
 	table.insert(Buckets[c], w)
 end
-
 if Config.CustomWords then
 	for _, w in ipairs(Config.CustomWords) do
 		local clean = w:gsub("[%s%c]+", ""):lower()
@@ -291,9 +281,8 @@ if Config.CustomWords then
 		end
 	end
 end
-
+-- Clear memory
 SeenWords = nil
-
 local function shuffleTable(t)
 	local n = #t
 	for i = n, 2, -1 do
@@ -302,7 +291,7 @@ local function shuffleTable(t)
 	end
 	return t
 end
-
+-- Check if word ends with any of the killer suffixes
 local function EndsWithKillerSuffix(word)
 	for _, suffix in ipairs(KillerSuffixes) do
 		if word:sub(-#suffix) == suffix then
@@ -311,11 +300,9 @@ local function EndsWithKillerSuffix(word)
 	end
 	return false
 end
-
 local function Tween(obj, props, time)
 	TweenService:Create(obj, TweenInfo.new(time or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
 end
-
 local function GetCurrentGameWord(providedFrame)
 	local frame = providedFrame
 	if not frame then
@@ -356,7 +343,6 @@ local function GetCurrentGameWord(providedFrame)
 	end
 	return detected:lower():gsub(" ", ""), censored
 end
-
 local function GetTurnInfo(providedFrame)
 	if isMyTurnLogDetected then
 		if tick() < turnExpiryTime then
@@ -383,35 +369,34 @@ local function GetTurnInfo(providedFrame)
 	end
 	return false, nil
 end
-
 local function GetSecureParent()
-	local success, result = pcall(function() return gethui() end)
+	local success, result = pcall(function()
+		return gethui()
+	end)
 	if success and result then return result end
-	success, result = pcall(function() return CoreGui end)
+	success, result = pcall(function()
+		return CoreGui
+	end)
 	if success and result then return result end
 	return Players.LocalPlayer.PlayerGui
 end
-
 local ParentTarget = GetSecureParent()
 local GuiName = tostring(math.random(1000000, 9999999))
 local env = (getgenv and getgenv()) or _G
 if env.WordHelperInstance and env.WordHelperInstance.Parent then
 	env.WordHelperInstance:Destroy()
 end
-
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = GuiName
 ScreenGui.Parent = ParentTarget
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 env.WordHelperInstance = ScreenGui
-
 local ToastContainer = Instance.new("Frame", ScreenGui)
 ToastContainer.Name = "ToastContainer"
 ToastContainer.Size = UDim2.new(0, 300, 1, 0)
 ToastContainer.Position = UDim2.new(1, -320, 0, 20)
 ToastContainer.BackgroundTransparency = 1
 ToastContainer.ZIndex = 100
-
 local function ShowToast(message, type)
 	local toast = Instance.new("Frame")
 	toast.Size = UDim2.new(1, 0, 0, 40)
@@ -452,7 +437,6 @@ local function ShowToast(message, type)
 		end
 	end)
 end
-
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 300, 0, 500)
@@ -462,7 +446,6 @@ MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
-
 local function EnableDragging(frame)
 	local dragging, dragInput, dragStart, startPos
 	local function Update(input)
@@ -492,19 +475,16 @@ local function EnableDragging(frame)
 		end
 	end)
 end
-
 EnableDragging(MainFrame)
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 local Stroke = Instance.new("UIStroke", MainFrame)
 Stroke.Color = THEME.Accent
 Stroke.Transparency = 0.5
 Stroke.Thickness = 2
-
 local Header = Instance.new("Frame", MainFrame)
 Header.Size = UDim2.new(1, 0, 0, 45)
 Header.BackgroundColor3 = THEME.ItemBG
 Header.BorderSizePixel = 0
-
 local Title = Instance.new("TextLabel", Header)
 Title.Text = "Last Letter <font color=\"rgb(114,100,255)\">AJG</font> V4"
 Title.RichText = true
@@ -515,7 +495,6 @@ Title.Size = UDim2.new(1, -50, 1, 0)
 Title.Position = UDim2.new(0, 15, 0, 0)
 Title.BackgroundTransparency = 1
 Title.TextXAlignment = Enum.TextXAlignment.Left
-
 local MinBtn = Instance.new("TextButton", Header)
 MinBtn.Text = "-"
 MinBtn.Font = Enum.Font.GothamBold
@@ -524,7 +503,6 @@ MinBtn.TextColor3 = THEME.SubText
 MinBtn.Size = UDim2.new(0, 45, 1, 0)
 MinBtn.Position = UDim2.new(1, -90, 0, 0)
 MinBtn.BackgroundTransparency = 1
-
 local CloseBtn = Instance.new("TextButton", Header)
 CloseBtn.Text = "X"
 CloseBtn.Font = Enum.Font.GothamBold
@@ -542,18 +520,15 @@ CloseBtn.MouseButton1Click:Connect(function()
 	table.clear(ButtonCache)
 	if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
 end)
-
 local StatusFrame = Instance.new("Frame", MainFrame)
 StatusFrame.Size = UDim2.new(1, -30, 0, 24)
 StatusFrame.Position = UDim2.new(0, 15, 0, 55)
 StatusFrame.BackgroundTransparency = 1
-
 local StatusDot = Instance.new("Frame", StatusFrame)
 StatusDot.Size = UDim2.new(0, 8, 0, 8)
 StatusDot.Position = UDim2.new(0, 0, 0.5, -4)
 StatusDot.BackgroundColor3 = THEME.SubText
 Instance.new("UICorner", StatusDot).CornerRadius = UDim.new(1, 0)
-
 local StatusText = Instance.new("TextLabel", StatusFrame)
 StatusText.Text = "Idle..."
 StatusText.RichText = true
@@ -564,13 +539,11 @@ StatusText.Size = UDim2.new(1, -15, 1, 0)
 StatusText.Position = UDim2.new(0, 15, 0, 0)
 StatusText.BackgroundTransparency = 1
 StatusText.TextXAlignment = Enum.TextXAlignment.Left
-
 local SearchFrame = Instance.new("Frame", MainFrame)
 SearchFrame.Size = UDim2.new(1, -10, 0, 26)
 SearchFrame.Position = UDim2.new(0, 5, 0, 82)
 SearchFrame.BackgroundColor3 = THEME.ItemBG
 Instance.new("UICorner", SearchFrame).CornerRadius = UDim.new(0, 6)
-
 local SearchBox = Instance.new("TextBox", SearchFrame)
 SearchBox.Size = UDim2.new(1, -20, 1, 0)
 SearchBox.Position = UDim2.new(0, 10, 0, 0)
@@ -587,7 +560,6 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 		UpdateList(lastDetected, lastRequiredLetter)
 	end
 end)
-
 local ScrollList = Instance.new("ScrollingFrame", MainFrame)
 ScrollList.Size = UDim2.new(1, -10, 1, -220)
 ScrollList.Position = UDim2.new(0, 5, 0, 115)
@@ -595,30 +567,24 @@ ScrollList.BackgroundTransparency = 1
 ScrollList.ScrollBarThickness = 3
 ScrollList.ScrollBarImageColor3 = THEME.Accent
 ScrollList.CanvasSize = UDim2.new(0,0,0,0)
-
 local UIListLayout = Instance.new("UIListLayout", ScrollList)
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 4)
-
 local SettingsFrame = Instance.new("Frame", MainFrame)
 SettingsFrame.BackgroundColor3 = THEME.ItemBG
 SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
-
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
 SlidersFrame.Size = UDim2.new(1, 0, 0, 125)
 SlidersFrame.BackgroundTransparency = 1
-
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 310)
 TogglesFrame.Position = UDim2.new(0, 0, 0, 125)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
-
 local sep = Instance.new("Frame", SettingsFrame)
 sep.Size = UDim2.new(1, 0, 0, 1)
 sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-
 local settingsCollapsed = true
 local function UpdateLayout()
 	if settingsCollapsed then
@@ -632,7 +598,6 @@ local function UpdateLayout()
 	end
 end
 UpdateLayout()
-
 local ExpandBtn = Instance.new("TextButton", SlidersFrame)
 ExpandBtn.Text = "v Show Settings v"
 ExpandBtn.Font = Enum.Font.GothamBold
@@ -648,31 +613,6 @@ ExpandBtn.MouseButton1Click:Connect(function()
 	ExpandBtn.Text = settingsCollapsed and "v Show Settings v" or "^ Hide Settings ^"
 	UpdateLayout()
 end)
-
-local function SetupSlider(btn, bg, fill, callback)
-	btn.MouseButton1Down:Connect(function()
-		local move, rel
-		local function Update()
-			local mousePos = UserInputService:GetMouseLocation()
-			local relX = math.clamp(mousePos.X - bg.AbsolutePosition.X, 0, bg.AbsoluteSize.X)
-			local pct = relX / bg.AbsoluteSize.X
-			callback(pct)
-			Config.CPM = currentCPM
-			Config.ErrorRate = errorRate
-			Config.ThinkDelay = thinkDelayCurrent
-		end
-		Update()
-		move = RunService.RenderStepped:Connect(Update)
-		rel = UserInputService.InputEnded:Connect(function(inp)
-			if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-				if move then move:Disconnect() move = nil end
-				if rel then rel:Disconnect() rel = nil end
-				SaveConfig()
-			end
-		end)
-	end)
-end
-
 local KeyboardFrame = Instance.new("Frame", ScreenGui)
 KeyboardFrame.Name = "KeyboardFrame"
 KeyboardFrame.Size = UDim2.new(0, 400, 0, 160)
@@ -685,7 +625,6 @@ local KStroke = Instance.new("UIStroke", KeyboardFrame)
 KStroke.Color = THEME.Accent
 KStroke.Transparency = 0.6
 KStroke.Thickness = 2
-
 local Keys = {}
 local function CreateKey(char, pos, size)
 	local k = Instance.new("Frame", KeyboardFrame)
@@ -703,7 +642,6 @@ local function CreateKey(char, pos, size)
 	Keys[char:lower()] = k
 	return k
 end
-
 local function GenerateKeyboard()
 	for _, c in ipairs(KeyboardFrame:GetChildren()) do
 		if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
@@ -739,11 +677,9 @@ local function GenerateKeyboard()
 		end
 	end
 	local space = CreateKey(" ", UDim2.new(0.5, -100, 0, startY + 3*35), UDim2.new(0, 200, 0, 30))
-	space:FindFirstChild("TextLabel").Text = "SPACE"
+	space.FindFirstChild(space, "TextLabel").Text = "SPACE"
 end
-
 GenerateKeyboard()
-
 local function CreateDropdown(parent, text, options, default, callback)
 	local container = Instance.new("Frame", parent)
 	container.Size = UDim2.new(0, 130, 0, 24)
@@ -789,7 +725,6 @@ local function CreateDropdown(parent, text, options, default, callback)
 	end
 	return container
 end
-
 local LayoutDropdown = CreateDropdown(TogglesFrame, "Layout", {"QWERTY", "QWERTZ", "AZERTY"}, keyboardLayout, function(val)
 	keyboardLayout = val
 	Config.KeyboardLayout = keyboardLayout
@@ -797,7 +732,6 @@ local LayoutDropdown = CreateDropdown(TogglesFrame, "Layout", {"QWERTY", "QWERTZ
 	SaveConfig()
 end)
 LayoutDropdown.Position = UDim2.new(0, 150, 0, 145)
-
 UserInputService.InputBegan:Connect(function(input)
 	if not showKeyboard then return end
 	if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -810,7 +744,6 @@ UserInputService.InputBegan:Connect(function(input)
 		end
 	end
 end)
-
 UserInputService.InputEnded:Connect(function(input)
 	if not showKeyboard then return end
 	if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -823,7 +756,6 @@ UserInputService.InputEnded:Connect(function(input)
 		end
 	end
 end)
-
 local SliderLabel = Instance.new("TextLabel", SlidersFrame)
 SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
 SliderLabel.Font = Enum.Font.GothamMedium
@@ -833,23 +765,19 @@ SliderLabel.Size = UDim2.new(1, -30, 0, 20)
 SliderLabel.Position = UDim2.new(0, 15, 0, 8)
 SliderLabel.BackgroundTransparency = 1
 SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
-
 local SliderBg = Instance.new("Frame", SlidersFrame)
 SliderBg.Size = UDim2.new(1, -30, 0, 6)
 SliderBg.Position = UDim2.new(0, 15, 0, 30)
 SliderBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
-
 local SliderFill = Instance.new("Frame", SliderBg)
 SliderFill.Size = UDim2.new(0.5, 0, 1, 0)
 SliderFill.BackgroundColor3 = THEME.Accent
 Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
-
 local SliderBtn = Instance.new("TextButton", SliderBg)
 SliderBtn.Size = UDim2.new(1,0,1,0)
 SliderBtn.BackgroundTransparency = 1
 SliderBtn.Text = ""
-
 local ErrorLabel = Instance.new("TextLabel", SlidersFrame)
 ErrorLabel.Text = "Error Rate: " .. errorRate .. "%"
 ErrorLabel.Font = Enum.Font.GothamMedium
@@ -859,18 +787,15 @@ ErrorLabel.Size = UDim2.new(1, -30, 0, 18)
 ErrorLabel.Position = UDim2.new(0, 15, 0, 36)
 ErrorLabel.BackgroundTransparency = 1
 ErrorLabel.TextXAlignment = Enum.TextXAlignment.Left
-
 local ErrorBg = Instance.new("Frame", SlidersFrame)
 ErrorBg.Size = UDim2.new(1, -30, 0, 6)
 ErrorBg.Position = UDim2.new(0, 15, 0, 56)
 ErrorBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", ErrorBg).CornerRadius = UDim.new(1, 0)
-
 local ErrorFill = Instance.new("Frame", ErrorBg)
 ErrorFill.Size = UDim2.new(errorRate/30, 0, 1, 0)
 ErrorFill.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
 Instance.new("UICorner", ErrorFill).CornerRadius = UDim.new(1, 0)
-
 local ErrorBtn = Instance.new("TextButton", ErrorBg)
 ErrorBtn.Size = UDim2.new(1,0,1,0)
 ErrorBtn.BackgroundTransparency = 1
@@ -881,7 +806,6 @@ SetupSlider(ErrorBtn, ErrorBg, ErrorFill, function(pct)
 	ErrorFill.Size = UDim2.new(pct, 0, 1, 0)
 	ErrorLabel.Text = "Error Rate: " .. errorRate .. "% (per-letter)"
 end)
-
 local ThinkLabel = Instance.new("TextLabel", SlidersFrame)
 ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 ThinkLabel.Font = Enum.Font.GothamMedium
@@ -891,19 +815,16 @@ ThinkLabel.Size = UDim2.new(1, -30, 0, 18)
 ThinkLabel.Position = UDim2.new(0, 15, 0, 62)
 ThinkLabel.BackgroundTransparency = 1
 ThinkLabel.TextXAlignment = Enum.TextXAlignment.Left
-
 local ThinkBg = Instance.new("Frame", SlidersFrame)
 ThinkBg.Size = UDim2.new(1, -30, 0, 6)
 ThinkBg.Position = UDim2.new(0, 15, 0, 82)
 ThinkBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", ThinkBg).CornerRadius = UDim.new(1, 0)
-
 local ThinkFill = Instance.new("Frame", ThinkBg)
 local thinkPct = (thinkDelayCurrent - thinkDelayMin) / (thinkDelayMax - thinkDelayMin)
 ThinkFill.Size = UDim2.new(thinkPct, 0, 1, 0)
 ThinkFill.BackgroundColor3 = THEME.Accent
 Instance.new("UICorner", ThinkFill).CornerRadius = UDim.new(1, 0)
-
 local ThinkBtn = Instance.new("TextButton", ThinkBg)
 ThinkBtn.Size = UDim2.new(1,0,1,0)
 ThinkBtn.BackgroundTransparency = 1
@@ -914,7 +835,6 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
 	ThinkFill.Size = UDim2.new(pct, 0, 1, 0)
 	ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 end)
-
 local function CreateToggle(text, pos, callback)
 	local btn = Instance.new("TextButton", TogglesFrame)
 	btn.Text = text
@@ -933,21 +853,18 @@ local function CreateToggle(text, pos, callback)
 	end)
 	return btn
 end
-
 local HumanizeBtn = CreateToggle("Humanize: "..(useHumanization and "ON" or "OFF"), UDim2.new(0, 15, 0, 5), function()
 	useHumanization = not useHumanization
 	Config.Humanize = useHumanization
 	return useHumanization, "Humanize: "..(useHumanization and "ON" or "OFF"), useHumanization and THEME.Success or Color3.fromRGB(255, 100, 100)
 end)
 HumanizeBtn.TextColor3 = useHumanization and THEME.Success or Color3.fromRGB(255, 100, 100)
-
 local FingerBtn = CreateToggle("10-Finger: "..(useFingerModel and "ON" or "OFF"), UDim2.new(0, 105, 0, 5), function()
 	useFingerModel = not useFingerModel
 	Config.FingerModel = useFingerModel
 	return useFingerModel, "10-Finger: "..(useFingerModel and "ON" or "OFF"), useFingerModel and THEME.Success or Color3.fromRGB(255, 100, 100)
 end)
 FingerBtn.TextColor3 = useFingerModel and THEME.Success or Color3.fromRGB(255, 100, 100)
-
 local KeyboardBtn = CreateToggle("Keyboard: "..(showKeyboard and "ON" or "OFF"), UDim2.new(0, 195, 0, 5), function()
 	showKeyboard = not showKeyboard
 	Config.ShowKeyboard = showKeyboard
@@ -955,7 +872,6 @@ local KeyboardBtn = CreateToggle("Keyboard: "..(showKeyboard and "ON" or "OFF"),
 	return showKeyboard, "Keyboard: "..(showKeyboard and "ON" or "OFF"), showKeyboard and THEME.Success or Color3.fromRGB(255, 100, 100)
 end)
 KeyboardBtn.TextColor3 = showKeyboard and THEME.Success or Color3.fromRGB(255, 100, 100)
-
 local SortBtn = CreateToggle("Sort: "..sortMode, UDim2.new(0, 15, 0, 33), function()
 	if sortMode == "Random" then sortMode = "Shortest"
 	elseif sortMode == "Shortest" then sortMode = "Longest"
@@ -967,7 +883,6 @@ local SortBtn = CreateToggle("Sort: "..sortMode, UDim2.new(0, 15, 0, 33), functi
 end)
 SortBtn.TextColor3 = THEME.Accent
 SortBtn.Size = UDim2.new(0, 130, 0, 24)
-
 local AutoBtn = CreateToggle("Auto Play: "..(autoPlay and "ON" or "OFF"), UDim2.new(0, 150, 0, 33), function()
 	autoPlay = not autoPlay
 	Config.AutoPlay = autoPlay
@@ -975,7 +890,6 @@ local AutoBtn = CreateToggle("Auto Play: "..(autoPlay and "ON" or "OFF"), UDim2.
 end)
 AutoBtn.TextColor3 = autoPlay and THEME.Success or Color3.fromRGB(255, 100, 100)
 AutoBtn.Size = UDim2.new(0, 130, 0, 24)
-
 local AutoJoinBtn = CreateToggle("Auto Join: "..(autoJoin and "ON" or "OFF"), UDim2.new(0, 15, 0, 61), function()
 	autoJoin = not autoJoin
 	Config.AutoJoin = autoJoin
@@ -983,7 +897,6 @@ local AutoJoinBtn = CreateToggle("Auto Join: "..(autoJoin and "ON" or "OFF"), UD
 end)
 AutoJoinBtn.TextColor3 = autoJoin and THEME.Success or Color3.fromRGB(255, 100, 100)
 AutoJoinBtn.Size = UDim2.new(0, 265, 0, 24)
-
 local function CreateCheckbox(text, pos, key)
 	local container = Instance.new("TextButton", TogglesFrame)
 	container.Size = UDim2.new(0, 90, 0, 24)
@@ -1030,11 +943,9 @@ local function CreateCheckbox(text, pos, key)
 	end
 	return container
 end
-
 CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
-
 local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
 	isBlatant = not isBlatant
 	Config.Blatant = isBlatant
@@ -1042,7 +953,6 @@ local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"),
 end)
 BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
-
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
 	riskyMistakes = not riskyMistakes
 	Config.RiskyMistakes = riskyMistakes
@@ -1050,15 +960,15 @@ local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OF
 end)
 RiskyBtn.TextColor3 = riskyMistakes and Color3.fromRGB(255, 80, 80) or THEME.SubText
 RiskyBtn.Size = UDim2.new(0, 130, 0, 24)
-
-local RandomizeTopBtn = CreateToggle("Randomize Top: "..(randomizeTop and "ON" or "OFF"), UDim2.new(0, 15, 0, 142), function()
+-- New: Randomize Top Toggle
+local RandomizeTopBtn = CreateToggle("Randomize Top: "..(randomizeTop and "ON" or "OFF"), UDim2.new(0, 290, 0, 115), function()
 	randomizeTop = not randomizeTop
 	Config.RandomizeTop = randomizeTop
 	return randomizeTop, "Randomize Top: "..(randomizeTop and "ON" or "OFF"), randomizeTop and THEME.Success or THEME.SubText
 end)
 RandomizeTopBtn.TextColor3 = randomizeTop and THEME.Success or THEME.SubText
 RandomizeTopBtn.Size = UDim2.new(0, 130, 0, 24)
-
+RandomizeTopBtn.Position = UDim2.new(0, 15, 0, 142) -- Adjusted pos
 local ManageWordsBtn = Instance.new("TextButton", TogglesFrame)
 ManageWordsBtn.Text = "Manage Custom Words"
 ManageWordsBtn.Font = Enum.Font.GothamMedium
@@ -1066,9 +976,8 @@ ManageWordsBtn.TextSize = 11
 ManageWordsBtn.TextColor3 = THEME.Accent
 ManageWordsBtn.BackgroundColor3 = THEME.Background
 ManageWordsBtn.Size = UDim2.new(0, 130, 0, 24)
-ManageWordsBtn.Position = UDim2.new(0, 150, 0, 142)
+ManageWordsBtn.Position = UDim2.new(0, 150, 0, 142) -- Adjusted pos
 Instance.new("UICorner", ManageWordsBtn).CornerRadius = UDim.new(0, 4)
-
 local WordBrowserBtn = Instance.new("TextButton", TogglesFrame)
 WordBrowserBtn.Text = "Word Browser"
 WordBrowserBtn.Font = Enum.Font.GothamMedium
@@ -1078,12 +987,21 @@ WordBrowserBtn.BackgroundColor3 = THEME.Background
 WordBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
 WordBrowserBtn.Position = UDim2.new(0, 15, 0, 175)
 Instance.new("UICorner", WordBrowserBtn).CornerRadius = UDim.new(0, 4)
+local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
+ServerBrowserBtn.Text = "Server Browser"
+ServerBrowserBtn.Font = Enum.Font.GothamMedium
+ServerBrowserBtn.TextSize = 11
+ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
+ServerBrowserBtn.BackgroundColor3 = THEME.Background
+ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
+ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
+Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 -- === USED WORDS WINDOW ===
 local UsedWordsFrame = Instance.new("Frame", ScreenGui)
 UsedWordsFrame.Name = "UsedWordsFrame"
-UsedWordsFrame.Size = UDim2.new(0, 250, 0, 300)
-UsedWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -150)
+UsedWordsFrame.Size = UDim2.new(0, 250, 0, 350)
+UsedWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
 UsedWordsFrame.BackgroundColor3 = THEME.Background
 UsedWordsFrame.Visible = false
 UsedWordsFrame.ClipsDescendants = true
@@ -1093,15 +1011,13 @@ local UWStroke = Instance.new("UIStroke", UsedWordsFrame)
 UWStroke.Color = THEME.Accent
 UWStroke.Transparency = 0.5
 UWStroke.Thickness = 2
-
 local UWHeader = Instance.new("TextLabel", UsedWordsFrame)
-UWHeader.Text = "Used Words"
+UWHeader.Text = "Used Words List"
 UWHeader.Font = Enum.Font.GothamBold
 UWHeader.TextSize = 14
 UWHeader.TextColor3 = THEME.Text
 UWHeader.Size = UDim2.new(1, 0, 0, 35)
 UWHeader.BackgroundTransparency = 1
-
 local UWCloseBtn = Instance.new("TextButton", UsedWordsFrame)
 UWCloseBtn.Text = "X"
 UWCloseBtn.Font = Enum.Font.GothamBold
@@ -1111,45 +1027,59 @@ UWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
 UWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
 UWCloseBtn.BackgroundTransparency = 1
 UWCloseBtn.MouseButton1Click:Connect(function() UsedWordsFrame.Visible = false end)
-
-local UWClearBtn = Instance.new("TextButton", UsedWordsFrame)
-UWClearBtn.Text = "Clear All"
-UWClearBtn.Font = Enum.Font.GothamBold
-UWClearBtn.TextSize = 12
-UWClearBtn.TextColor3 = THEME.Warning
-UWClearBtn.BackgroundColor3 = THEME.ItemBG
-UWClearBtn.Size = UDim2.new(0, 80, 0, 24)
-UWClearBtn.Position = UDim2.new(1, -90, 0, 5)
-Instance.new("UICorner", UWClearBtn).CornerRadius = UDim.new(0, 4)
-UWClearBtn.MouseButton1Click:Connect(function()
-	UsedWords = {}
+local UsedWordsBtn = Instance.new("TextButton", TogglesFrame)
+UsedWordsBtn.Text = "Used Words"
+UsedWordsBtn.Font = Enum.Font.GothamMedium
+UsedWordsBtn.TextSize = 11
+UsedWordsBtn.TextColor3 = Color3.fromRGB(255, 200, 100)
+UsedWordsBtn.BackgroundColor3 = THEME.Background
+UsedWordsBtn.Size = UDim2.new(0, 130, 0, 24)
+UsedWordsBtn.Position = UDim2.new(0, 15, 0, 235)
+Instance.new("UICorner", UsedWordsBtn).CornerRadius = UDim.new(0, 4)
+UsedWordsBtn.MouseButton1Click:Connect(function()
+	UsedWordsFrame.Visible = not UsedWordsFrame.Visible
+	UsedWordsFrame.Parent = nil
+	UsedWordsFrame.Parent = ScreenGui
 	RefreshUsedWords()
-	ShowToast("UsedWords cleared!", "success")
 end)
-
 local UWScroll = Instance.new("ScrollingFrame", UsedWordsFrame)
-UWScroll.Size = UDim2.new(1, -10, 1, -70)
+UWScroll.Size = UDim2.new(1, -10, 1, -80)
 UWScroll.Position = UDim2.new(0, 5, 0, 40)
 UWScroll.BackgroundTransparency = 1
 UWScroll.ScrollBarThickness = 2
 UWScroll.ScrollBarImageColor3 = THEME.Accent
 UWScroll.CanvasSize = UDim2.new(0,0,0,0)
-
-local UWLayout = Instance.new("UIListLayout", UWScroll)
-UWLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UWLayout.Padding = UDim.new(0, 2)
-
+local UWListLayout = Instance.new("UIListLayout", UWScroll)
+UWListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UWListLayout.Padding = UDim.new(0, 2)
+local UWClearBtn = Instance.new("TextButton", UsedWordsFrame)
+UWClearBtn.Text = "Clear All"
+UWClearBtn.Font = Enum.Font.GothamBold
+UWClearBtn.TextSize = 12
+UWClearBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+UWClearBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 30)
+UWClearBtn.Size = UDim2.new(0, 100, 0, 24)
+UWClearBtn.Position = UDim2.new(0.5, -50, 1, -30)
+Instance.new("UICorner", UWClearBtn).CornerRadius = UDim.new(0, 4)
+UWClearBtn.MouseButton1Click:Connect(function()
+	UsedWords = {}
+	RefreshUsedWords()
+	ShowToast("Cache Cleared Successfully!", "success")
+end)
 local function RefreshUsedWords()
 	for _, c in ipairs(UWScroll:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
 	end
 	local count = 0
-	for word, _ in pairs(UsedWords) do
+	for word in pairs(UsedWords) do
 		count = count + 1
-		local row = Instance.new("Frame", UWScroll)
+		local row = Instance.new("TextButton", UWScroll)
 		row.Size = UDim2.new(1, -6, 0, 22)
 		row.BackgroundColor3 = (count % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
 		row.BorderSizePixel = 0
+		row.Text = ""
+		row.AutoButtonColor = false
+		Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
 		local lbl = Instance.new("TextLabel", row)
 		lbl.Text = word
 		lbl.Font = Enum.Font.Gotham
@@ -1170,82 +1100,81 @@ local function RefreshUsedWords()
 		del.MouseButton1Click:Connect(function()
 			UsedWords[word] = nil
 			RefreshUsedWords()
+			ShowToast("Removed from Used: " .. word, "warning")
 		end)
 	end
 	UWScroll.CanvasSize = UDim2.new(0, 0, 0, count * 24)
 end
 
-local UsedWordsBtn = Instance.new("TextButton", TogglesFrame)
-UsedWordsBtn.Text = "Used Words"
-UsedWordsBtn.Font = Enum.Font.GothamMedium
-UsedWordsBtn.TextSize = 11
-UsedWordsBtn.TextColor3 = Color3.fromRGB(100, 255, 140)
-UsedWordsBtn.BackgroundColor3 = THEME.Background
-UsedWordsBtn.Size = UDim2.new(0, 265, 0, 24)
-UsedWordsBtn.Position = UDim2.new(0, 15, 0, 145)
-Instance.new("UICorner", UsedWordsBtn).CornerRadius = UDim.new(0, 4)
-UsedWordsBtn.MouseButton1Click:Connect(function()
-	UsedWordsFrame.Visible = not UsedWordsFrame.Visible
-	UsedWordsFrame.Parent = ScreenGui
-	RefreshUsedWords()
+-- === BLACKLIST WORDS WINDOW ===
+local BlacklistWordsFrame = Instance.new("Frame", ScreenGui)
+BlacklistWordsFrame.Name = "BlacklistWordsFrame"
+BlacklistWordsFrame.Size = UDim2.new(0, 250, 0, 350)
+BlacklistWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
+BlacklistWordsFrame.BackgroundColor3 = THEME.Background
+BlacklistWordsFrame.Visible = false
+BlacklistWordsFrame.ClipsDescendants = true
+EnableDragging(BlacklistWordsFrame)
+Instance.new("UICorner", BlacklistWordsFrame).CornerRadius = UDim.new(0, 8)
+local BWStroke = Instance.new("UIStroke", BlacklistWordsFrame)
+BWStroke.Color = THEME.Accent
+BWStroke.Transparency = 0.5
+BWStroke.Thickness = 2
+local BWHeader = Instance.new("TextLabel", BlacklistWordsFrame)
+BWHeader.Text = "Blacklist Words"
+BWHeader.Font = Enum.Font.GothamBold
+BWHeader.TextSize = 14
+BWHeader.TextColor3 = THEME.Text
+BWHeader.Size = UDim2.new(1, 0, 0, 35)
+BWHeader.BackgroundTransparency = 1
+local BWCloseBtn = Instance.new("TextButton", BlacklistWordsFrame)
+BWCloseBtn.Text = "X"
+BWCloseBtn.Font = Enum.Font.GothamBold
+BWCloseBtn.TextSize = 14
+BWCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+BWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+BWCloseBtn.BackgroundTransparency = 1
+BWCloseBtn.MouseButton1Click:Connect(function() BlacklistWordsFrame.Visible = false end)
+local BlacklistWordsBtn = Instance.new("TextButton", TogglesFrame)
+BlacklistWordsBtn.Text = "Blacklist Words"
+BlacklistWordsBtn.Font = Enum.Font.GothamMedium
+BlacklistWordsBtn.TextSize = 11
+BlacklistWordsBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BlacklistWordsBtn.BackgroundColor3 = THEME.Background
+BlacklistWordsBtn.Size = UDim2.new(0, 130, 0, 24)
+BlacklistWordsBtn.Position = UDim2.new(0, 150, 0, 235)
+Instance.new("UICorner", BlacklistWordsBtn).CornerRadius = UDim.new(0, 4)
+BlacklistWordsBtn.MouseButton1Click:Connect(function()
+	BlacklistWordsFrame.Visible = not BlacklistWordsFrame.Visible
+	BlacklistWordsFrame.Parent = nil
+	BlacklistWordsFrame.Parent = ScreenGui
+	RefreshBlacklistWords()
 end)
-
--- === BLACKLIST WINDOW ===
-local BlacklistFrame = Instance.new("Frame", ScreenGui)
-BlacklistFrame.Name = "BlacklistFrame"
-BlacklistFrame.Size = UDim2.new(0, 250, 0, 300)
-BlacklistFrame.Position = UDim2.new(0.5, -125, 0.5, -150)
-BlacklistFrame.BackgroundColor3 = THEME.Background
-BlacklistFrame.Visible = false
-BlacklistFrame.ClipsDescendants = true
-EnableDragging(BlacklistFrame)
-Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
-local BLStroke = Instance.new("UIStroke", BlacklistFrame)
-BLStroke.Color = THEME.Accent
-BLStroke.Transparency = 0.5
-BLStroke.Thickness = 2
-
-local BLHeader = Instance.new("TextLabel", BlacklistFrame)
-BLHeader.Text = "Blacklisted Words"
-BLHeader.Font = Enum.Font.GothamBold
-BLHeader.TextSize = 14
-BLHeader.TextColor3 = THEME.Text
-BLHeader.Size = UDim2.new(1, 0, 0, 35)
-BLHeader.BackgroundTransparency = 1
-
-local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
-BLCloseBtn.Text = "X"
-BLCloseBtn.Font = Enum.Font.GothamBold
-BLCloseBtn.TextSize = 14
-BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
-BLCloseBtn.BackgroundTransparency = 1
-BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
-
-local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
-BLScroll.Size = UDim2.new(1, -10, 1, -40)
-BLScroll.Position = UDim2.new(0, 5, 0, 40)
-BLScroll.BackgroundTransparency = 1
-BLScroll.ScrollBarThickness = 2
-BLScroll.ScrollBarImageColor3 = THEME.Accent
-BLScroll.CanvasSize = UDim2.new(0,0,0,0)
-
-local BLLayout = Instance.new("UIListLayout", BLScroll)
-BLLayout.SortOrder = Enum.SortOrder.LayoutOrder
-BLLayout.Padding = UDim.new(0, 2)
-
-local function RefreshBlacklist()
-	for _, c in ipairs(BLScroll:GetChildren()) do
+local BWScroll = Instance.new("ScrollingFrame", BlacklistWordsFrame)
+BWScroll.Size = UDim2.new(1, -10, 1, -80)
+BWScroll.Position = UDim2.new(0, 5, 0, 40)
+BWScroll.BackgroundTransparency = 1
+BWScroll.ScrollBarThickness = 2
+BWScroll.ScrollBarImageColor3 = THEME.Accent
+BWScroll.CanvasSize = UDim2.new(0,0,0,0)
+local BWListLayout = Instance.new("UIListLayout", BWScroll)
+BWListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BWListLayout.Padding = UDim.new(0, 2)
+local function RefreshBlacklistWords()
+	for _, c in ipairs(BWScroll:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
 	end
 	local count = 0
-	for word, _ in pairs(Blacklist) do
+	for word in pairs(Blacklist) do
 		count = count + 1
-		local row = Instance.new("Frame", BLScroll)
+		local row = Instance.new("TextButton", BWScroll)
 		row.Size = UDim2.new(1, -6, 0, 22)
 		row.BackgroundColor3 = (count % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
 		row.BorderSizePixel = 0
+		row.Text = ""
+		row.AutoButtonColor = false
+		Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
 		local lbl = Instance.new("TextLabel", row)
 		lbl.Text = word
 		lbl.Font = Enum.Font.Gotham
@@ -1264,45 +1193,13 @@ local function RefreshBlacklist()
 		del.Position = UDim2.new(1, -22, 0, 0)
 		del.BackgroundTransparency = 1
 		del.MouseButton1Click:Connect(function()
-			Blacklist[word] = nil
-			AddToBlacklist(word) -- will re-add if needed, but here we just remove from memory
-			if isfile and isfile(BlacklistFile) then
-				local lines = {}
-				for line in readfile(BlacklistFile):gmatch("[^\r\n]+") do
-					if line:lower() ~= word then table.insert(lines, line) end
-				end
-				writefile(BlacklistFile, table.concat(lines, "\n"))
-			end
-			RefreshBlacklist()
+			RemoveFromBlacklist(word)
+			RefreshBlacklistWords()
+			ShowToast("Removed from Blacklist: " .. word, "warning")
 		end)
 	end
-	BLScroll.CanvasSize = UDim2.new(0, 0, 0, count * 24)
+	BWScroll.CanvasSize = UDim2.new(0, 0, 0, count * 24)
 end
-
-local BlacklistBtn = Instance.new("TextButton", TogglesFrame)
-BlacklistBtn.Text = "Blacklist Words"
-BlacklistBtn.Font = Enum.Font.GothamMedium
-BlacklistBtn.TextSize = 11
-BlacklistBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
-BlacklistBtn.BackgroundColor3 = THEME.Background
-BlacklistBtn.Size = UDim2.new(0, 265, 0, 24)
-BlacklistBtn.Position = UDim2.new(0, 15, 0, 172)
-Instance.new("UICorner", BlacklistBtn).CornerRadius = UDim.new(0, 4)
-BlacklistBtn.MouseButton1Click:Connect(function()
-	BlacklistFrame.Visible = not BlacklistFrame.Visible
-	BlacklistFrame.Parent = ScreenGui
-	RefreshBlacklist()
-end)
-
-local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
-ServerBrowserBtn.Text = "Server Browser"
-ServerBrowserBtn.Font = Enum.Font.GothamMedium
-ServerBrowserBtn.TextSize = 11
-ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
-ServerBrowserBtn.BackgroundColor3 = THEME.Background
-ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
-Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
@@ -1317,7 +1214,6 @@ local CWStroke = Instance.new("UIStroke", CustomWordsFrame)
 CWStroke.Color = THEME.Accent
 CWStroke.Transparency = 0.5
 CWStroke.Thickness = 2
-
 local CWHeader = Instance.new("TextLabel", CustomWordsFrame)
 CWHeader.Text = "Custom Words Manager"
 CWHeader.Font = Enum.Font.GothamBold
@@ -1325,7 +1221,6 @@ CWHeader.TextSize = 14
 CWHeader.TextColor3 = THEME.Text
 CWHeader.Size = UDim2.new(1, 0, 0, 35)
 CWHeader.BackgroundTransparency = 1
-
 local CWCloseBtn = Instance.new("TextButton", CustomWordsFrame)
 CWCloseBtn.Text = "X"
 CWCloseBtn.Font = Enum.Font.GothamBold
@@ -1335,12 +1230,11 @@ CWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
 CWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
 CWCloseBtn.BackgroundTransparency = 1
 CWCloseBtn.MouseButton1Click:Connect(function() CustomWordsFrame.Visible = false end)
-
 ManageWordsBtn.MouseButton1Click:Connect(function()
 	CustomWordsFrame.Visible = not CustomWordsFrame.Visible
+	CustomWordsFrame.Parent = nil
 	CustomWordsFrame.Parent = ScreenGui
 end)
-
 local function SetupPhantomBox(box, placeholder)
 	box.Text = placeholder
 	box.TextColor3 = THEME.SubText
@@ -1357,7 +1251,6 @@ local function SetupPhantomBox(box, placeholder)
 		end
 	end)
 end
-
 local CWSearchBox = Instance.new("TextBox", CustomWordsFrame)
 CWSearchBox.Font = Enum.Font.Gotham
 CWSearchBox.TextSize = 12
@@ -1366,7 +1259,6 @@ CWSearchBox.Size = UDim2.new(1, -20, 0, 24)
 CWSearchBox.Position = UDim2.new(0, 10, 0, 35)
 Instance.new("UICorner", CWSearchBox).CornerRadius = UDim.new(0, 4)
 SetupPhantomBox(CWSearchBox, "Search words...")
-
 local CWScroll = Instance.new("ScrollingFrame", CustomWordsFrame)
 CWScroll.Size = UDim2.new(1, -10, 1, -110)
 CWScroll.Position = UDim2.new(0, 5, 0, 65)
@@ -1374,11 +1266,9 @@ CWScroll.BackgroundTransparency = 1
 CWScroll.ScrollBarThickness = 2
 CWScroll.ScrollBarImageColor3 = THEME.Accent
 CWScroll.CanvasSize = UDim2.new(0,0,0,0)
-
 local CWListLayout = Instance.new("UIListLayout", CWScroll)
 CWListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 CWListLayout.Padding = UDim.new(0, 2)
-
 local CWAddBox = Instance.new("TextBox", CustomWordsFrame)
 CWAddBox.Font = Enum.Font.Gotham
 CWAddBox.TextSize = 12
@@ -1387,7 +1277,6 @@ CWAddBox.Size = UDim2.new(0, 170, 0, 24)
 CWAddBox.Position = UDim2.new(0, 10, 1, -35)
 Instance.new("UICorner", CWAddBox).CornerRadius = UDim.new(0, 4)
 SetupPhantomBox(CWAddBox, "Add new word...")
-
 local CWAddBtn = Instance.new("TextButton", CustomWordsFrame)
 CWAddBtn.Text = "Add"
 CWAddBtn.Font = Enum.Font.GothamBold
@@ -1397,7 +1286,6 @@ CWAddBtn.BackgroundColor3 = THEME.ItemBG
 CWAddBtn.Size = UDim2.new(0, 50, 0, 24)
 CWAddBtn.Position = UDim2.new(1, -60, 1, -35)
 Instance.new("UICorner", CWAddBtn).CornerRadius = UDim.new(0, 4)
-
 local function RefreshCustomWords()
 	for _, c in ipairs(CWScroll:GetChildren()) do
 		if c:IsA("Frame") then c:Destroy() end
@@ -1451,9 +1339,7 @@ local function RefreshCustomWords()
 	end
 	CWScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
 end
-
 CWSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshCustomWords)
-
 CWAddBtn.MouseButton1Click:Connect(function()
 	local text = CWAddBox.Text
 	if text == "Add new word..." then return end
@@ -1488,7 +1374,6 @@ CWAddBtn.MouseButton1Click:Connect(function()
 	RefreshCustomWords()
 	ShowToast("Added custom word: " .. text, "success")
 end)
-
 RefreshCustomWords()
 
 local ServerFrame = Instance.new("Frame", ScreenGui)
@@ -1504,7 +1389,6 @@ local SBStroke = Instance.new("UIStroke", ServerFrame)
 SBStroke.Color = THEME.Accent
 SBStroke.Transparency = 0.5
 SBStroke.Thickness = 2
-
 local SBHeader = Instance.new("TextLabel", ServerFrame)
 SBHeader.Text = "Server Browser"
 SBHeader.Font = Enum.Font.GothamBold
@@ -1512,7 +1396,6 @@ SBHeader.TextSize = 16
 SBHeader.TextColor3 = THEME.Text
 SBHeader.Size = UDim2.new(1, 0, 0, 40)
 SBHeader.BackgroundTransparency = 1
-
 local SBClose = Instance.new("TextButton", ServerFrame)
 SBClose.Text = "X"
 SBClose.Font = Enum.Font.GothamBold
@@ -1522,18 +1405,15 @@ SBClose.Size = UDim2.new(0, 40, 0, 40)
 SBClose.Position = UDim2.new(1, -40, 0, 0)
 SBClose.BackgroundTransparency = 1
 SBClose.MouseButton1Click:Connect(function() ServerFrame.Visible = false end)
-
 local SBList = Instance.new("ScrollingFrame", ServerFrame)
 SBList.Size = UDim2.new(1, -20, 1, -90)
 SBList.Position = UDim2.new(0, 10, 0, 50)
 SBList.BackgroundTransparency = 1
 SBList.ScrollBarThickness = 3
 SBList.ScrollBarImageColor3 = THEME.Accent
-
 local SBLayout = Instance.new("UIListLayout", SBList)
 SBLayout.Padding = UDim.new(0, 5)
 SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
 local ServerSortMode = "Smallest"
 local SBSortBtn = Instance.new("TextButton", ServerFrame)
 SBSortBtn.Text = "Sort: Smallest"
@@ -1544,7 +1424,6 @@ SBSortBtn.TextColor3 = THEME.SubText
 SBSortBtn.Size = UDim2.new(0.5, -15, 0, 30)
 SBSortBtn.Position = UDim2.new(0, 10, 1, -40)
 Instance.new("UICorner", SBSortBtn).CornerRadius = UDim.new(0, 6)
-
 local SBRefresh = Instance.new("TextButton", ServerFrame)
 SBRefresh.Text = "Refresh"
 SBRefresh.Font = Enum.Font.GothamBold
@@ -1553,7 +1432,6 @@ SBRefresh.BackgroundColor3 = THEME.Accent
 SBRefresh.Size = UDim2.new(0.5, -15, 0, 30)
 SBRefresh.Position = UDim2.new(0.5, 5, 1, -40)
 Instance.new("UICorner", SBRefresh).CornerRadius = UDim.new(0, 6)
-
 local function FetchServers()
 	SBRefresh.Text = "..."
 	for _, c in ipairs(SBList:GetChildren()) do
@@ -1602,6 +1480,7 @@ local function FetchServers()
 						join.MouseButton1Click:Connect(function()
 							join.Text = "Joining..."
 							ShowToast("Teleporting...", "success")
+							-- Updated Teleport Script URL
 							if queue_on_teleport then
 								queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/yay.lua"))()')
 							end
@@ -1627,7 +1506,6 @@ local function FetchServers()
 		SBRefresh.Text = "Refresh"
 	end)
 end
-
 SBSortBtn.MouseButton1Click:Connect(function()
 	if ServerSortMode == "Smallest" then
 		ServerSortMode = "Largest"
@@ -1637,11 +1515,10 @@ SBSortBtn.MouseButton1Click:Connect(function()
 	SBSortBtn.Text = "Sort: " .. ServerSortMode
 	FetchServers()
 end)
-
 SBRefresh.MouseButton1Click:Connect(FetchServers)
-
 ServerBrowserBtn.MouseButton1Click:Connect(function()
 	ServerFrame.Visible = not ServerFrame.Visible
+	ServerFrame.Parent = nil
 	ServerFrame.Parent = ScreenGui
 	if ServerFrame.Visible then
 		FetchServers()
@@ -1662,7 +1539,6 @@ do
 	WBStroke.Color = THEME.Accent
 	WBStroke.Transparency = 0.5
 	WBStroke.Thickness = 2
-
 	local WBHeader = Instance.new("TextLabel", WordBrowserFrame)
 	WBHeader.Text = "Word Browser"
 	WBHeader.Font = Enum.Font.GothamBold
@@ -1670,7 +1546,6 @@ do
 	WBHeader.TextColor3 = THEME.Text
 	WBHeader.Size = UDim2.new(1, 0, 0, 40)
 	WBHeader.BackgroundTransparency = 1
-
 	local WBClose = Instance.new("TextButton", WordBrowserFrame)
 	WBClose.Text = "X"
 	WBClose.Font = Enum.Font.GothamBold
@@ -1680,7 +1555,6 @@ do
 	WBClose.Position = UDim2.new(1, -40, 0, 0)
 	WBClose.BackgroundTransparency = 1
 	WBClose.MouseButton1Click:Connect(function() WordBrowserFrame.Visible = false end)
-
 	local WBStartBox = Instance.new("TextBox", WordBrowserFrame)
 	WBStartBox.Font = Enum.Font.Gotham
 	WBStartBox.TextSize = 12
@@ -1689,7 +1563,6 @@ do
 	WBStartBox.Position = UDim2.new(0, 10, 0, 45)
 	Instance.new("UICorner", WBStartBox).CornerRadius = UDim.new(0, 4)
 	SetupPhantomBox(WBStartBox, "Starts with...")
-
 	local WBEndBox = Instance.new("TextBox", WordBrowserFrame)
 	WBEndBox.Font = Enum.Font.Gotham
 	WBEndBox.TextSize = 12
@@ -1698,7 +1571,6 @@ do
 	WBEndBox.Position = UDim2.new(0.45, 0, 0, 45)
 	Instance.new("UICorner", WBEndBox).CornerRadius = UDim.new(0, 4)
 	SetupPhantomBox(WBEndBox, "Ends with...")
-
 	local WBLengthBox = Instance.new("TextBox", WordBrowserFrame)
 	WBLengthBox.Font = Enum.Font.Gotham
 	WBLengthBox.TextSize = 12
@@ -1707,7 +1579,6 @@ do
 	WBLengthBox.Position = UDim2.new(0.02, 0, 0, 80)
 	Instance.new("UICorner", WBLengthBox).CornerRadius = UDim.new(0, 4)
 	SetupPhantomBox(WBLengthBox, "Len...")
-
 	local WBSearchBtn = Instance.new("TextButton", WordBrowserFrame)
 	WBSearchBtn.Text = "Go"
 	WBSearchBtn.Font = Enum.Font.GothamBold
@@ -1716,7 +1587,6 @@ do
 	WBSearchBtn.Size = UDim2.new(0.1, 0, 0, 24)
 	WBSearchBtn.Position = UDim2.new(0.88, 0, 0, 45)
 	Instance.new("UICorner", WBSearchBtn).CornerRadius = UDim.new(0, 4)
-
 	local WBList = Instance.new("ScrollingFrame", WordBrowserFrame)
 	WBList.Size = UDim2.new(1, -20, 1, -125)
 	WBList.Position = UDim2.new(0, 10, 0, 115)
@@ -1724,11 +1594,9 @@ do
 	WBList.ScrollBarThickness = 3
 	WBList.ScrollBarImageColor3 = THEME.Accent
 	WBList.CanvasSize = UDim2.new(0,0,0,0)
-
 	local WBLayout = Instance.new("UIListLayout", WBList)
 	WBLayout.Padding = UDim.new(0, 2)
 	WBLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
 	local function SearchWords()
 		for _, c in ipairs(WBList:GetChildren()) do
 			if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end
@@ -1744,6 +1612,7 @@ do
 		Config.SuffixMode = eVal
 		lengthMode = lVal or 0
 		Config.LengthMode = lengthMode
+		-- Trigger main list update
 		if UpdateList then
 			UpdateList(lastDetected, lastRequiredLetter)
 		end
@@ -1792,14 +1661,13 @@ do
 		end
 		WBList.CanvasSize = UDim2.new(0,0,0, WBLayout.AbsoluteContentSize.Y)
 	end
-
 	WBSearchBtn.MouseButton1Click:Connect(SearchWords)
 	WBStartBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
 	WBEndBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
 	WBLengthBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
-
 	WordBrowserBtn.MouseButton1Click:Connect(function()
 		WordBrowserFrame.Visible = not WordBrowserFrame.Visible
+		WordBrowserFrame.Parent = nil
 		WordBrowserFrame.Parent = ScreenGui
 	end)
 end
@@ -1810,7 +1678,6 @@ local function CalculateDelay()
 	local variance = baseDelay * 0.4
 	return useHumanization and (baseDelay + math.random()*variance - (variance/2)) or baseDelay
 end
-
 local KEY_POS = {}
 do
 	local row1 = "qwertyuiop"
@@ -1826,7 +1693,6 @@ do
 		KEY_POS[row3:sub(i,i)] = {x = i + 1, y = 3}
 	end
 end
-
 local function KeyDistance(a, b)
 	if not a or not b then return 1 end
 	a = a:lower()
@@ -1838,9 +1704,7 @@ local function KeyDistance(a, b)
 	local dy = pa.y - pb.y
 	return math.sqrt(dx*dx + dy*dy)
 end
-
 local lastKey = nil
-
 local function CalculateDelayForKeys(prevChar, nextChar)
 	if isBlatant then
 		return 60 / currentCPM
@@ -1868,10 +1732,8 @@ local function CalculateDelayForKeys(prevChar, nextChar)
 		return baseDelay
 	end
 end
-
 local VirtualUser = game:GetService("VirtualUser")
 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
 local function GetKeyCode(char)
 	local layout = Config.KeyboardLayout or "QWERTY"
 	if type(char) == "string" and #char == 1 then
@@ -1890,7 +1752,6 @@ local function GetKeyCode(char)
 	end
 	return nil
 end
-
 local function SimulateKey(input)
 	if typeof(input) == "string" and #input == 1 then
 		local char = input
@@ -1932,7 +1793,6 @@ local function SimulateKey(input)
 		end
 	end
 end
-
 local function Backspace(count)
 	local focused = UserInputService:GetFocusedTextBox()
 	if focused and focused:IsDescendantOf(game) and focused.TextEditable then
@@ -1951,12 +1811,10 @@ local function Backspace(count)
 	end
 	lastKey = nil
 end
-
 local function PressEnter()
 	SimulateKey(Enum.KeyCode.Return)
 	lastKey = nil
 end
-
 local function GetGameTextBox()
 	local player = Players.LocalPlayer
 	local gui = player and player:FindFirstChild("PlayerGui")
@@ -1974,7 +1832,6 @@ local function GetGameTextBox()
 	end
 	return UserInputService:GetFocusedTextBox()
 end
-
 local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 	if unloaded then return end
 	if isTyping then
@@ -2027,6 +1884,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 					task.wait(0.15 + math.random() * 0.45)
 				end
 			end
+			-- Pre-submission verify
 			local finalCheck = GetGameTextBox()
 			if not riskyMistakes then
 				task.wait(0.1)
@@ -2052,6 +1910,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 				task.wait(0.05)
 			end
 			if not accepted then
+				-- Add to persistent blacklist
 				AddToBlacklist(targetWord)
 				RandomPriority[targetWord] = nil
 				for k, list in pairs(RandomOrderCache) do
@@ -2126,7 +1985,9 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 					task.wait(0.12 + math.random() * 0.5)
 				end
 			end
+			-- Pre-submission verify
 			if not riskyMistakes then
+				-- Wait a moment for last character to register
 				task.wait(0.1)
 				local finalCheck = GetGameTextBox()
 				if finalCheck and finalCheck.Text ~= targetWord then
@@ -2135,6 +1996,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 					Backspace(#finalCheck.Text)
 					isTyping = false
 					forceUpdateList = true
+					-- Return without blacklisting
 					return
 				end
 			end
@@ -2201,20 +2063,21 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 		end
 	end)
 	if not success then
+		-- Error Handling: Force retry
 		warn("SmartType Error: " .. tostring(err))
 		StatusText.Text = "Script Error - Retrying..."
 		StatusText.TextColor3 = THEME.Warning
+		-- Blacklist current target to avoid infinite loop on broken word
 		AddToBlacklist(targetWord)
 		isTyping = false
 		forceUpdateList = true
 		task.wait(0.5)
 		local _, req = GetTurnInfo()
-		UpdateList(lastDetected, req)
+		UpdateList(lastDetected, req) -- Trigger update list immediately
 	end
 	isTyping = false
 	forceUpdateList = true
 end
-
 local function GetMatchLength(str, prefix)
 	local len = 0
 	local max = math.min(#str, #prefix)
@@ -2228,7 +2091,6 @@ local function GetMatchLength(str, prefix)
 	end
 	return len
 end
-
 local function BinarySearchStart(list, prefix)
 	local left = 1
 	local right = #list
@@ -2249,7 +2111,6 @@ local function BinarySearchStart(list, prefix)
 	end
 	return result
 end
-
 UpdateList = function(detectedText, requiredLetter)
 	local matches = {}
 	local searchPrefix = detectedText
@@ -2288,6 +2149,7 @@ UpdateList = function(detectedText, requiredLetter)
 		if bucket then
 			local checkWord = function(w)
 				if Blacklist[w] or UsedWords[w] then return end
+				-- Check for main list filtering (suffix/length)
 				if suffixMode ~= "" and w:sub(-#suffixMode) ~= suffixMode then return end
 				local isLengthMatch = true
 				if not tryFallbackLengths and lengthMode > 0 then
@@ -2363,10 +2225,10 @@ UpdateList = function(detectedText, requiredLetter)
 					end
 				end
 			end
-			if #matches > 0 then
-				searchPrefix = requiredLetter
-				isBacktracked = true
-			end
+		end
+		if #matches > 0 then
+			searchPrefix = requiredLetter
+			isBacktracked = true
 		end
 	end
 	if #matches > 0 then
@@ -2375,14 +2237,17 @@ UpdateList = function(detectedText, requiredLetter)
 		elseif sortMode == "Shortest" then
 			table.sort(matches, function(a, b) return #a < #b end)
 		elseif sortMode == "Killer" then
+			-- Updated Killer Sort Logic
 			table.sort(matches, function(a, b)
 				local aKiller = EndsWithKillerSuffix(a)
 				local bKiller = EndsWithKillerSuffix(b)
 				if aKiller and not bKiller then return true end
 				if not aKiller and bKiller then return false end
+				-- If both are killer or both are not, prioritize shortness for killer (usually harder) or randomness
 				return #a < #b
 			end)
 		end
+		-- Logic for Humanizing Sorted Lists
 		if (sortMode == "Longest" or sortMode == "Shortest" or sortMode == "Killer") and randomizeTop and #matches > 1 then
 			local topN = math.min(#matches, 5)
 			local topPart = {}
@@ -2507,7 +2372,6 @@ UpdateList = function(detectedText, requiredLetter)
 	end
 	ScrollList.CanvasSize = UDim2.new(0,0,0, UIListLayout.AbsoluteContentSize.Y)
 end
-
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
 	local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
 	currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
@@ -2516,7 +2380,6 @@ SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
 	if currentCPM > 900 then Tween(SliderFill, {BackgroundColor3 = Color3.fromRGB(255,80,80)})
 	else Tween(SliderFill, {BackgroundColor3 = THEME.Accent}) end
 end)
-
 MinBtn.MouseButton1Click:Connect(function()
 	local isMin = MainFrame.Size.Y.Offset < 100
 	if not isMin then
@@ -2534,7 +2397,6 @@ MinBtn.MouseButton1Click:Connect(function()
 		MinBtn.Text = "-"
 	end
 end)
-
 local lastTypeVisible = false
 local lastRequiredLetter = ""
 local StatsData = {}
@@ -2571,7 +2433,6 @@ do
 	sc.Parent = sf
 	StatsData.Count = sc
 end
-
 runConn = RunService.RenderStepped:Connect(function()
 	local success, err = pcall(function()
 		local now = tick()
@@ -2603,6 +2464,7 @@ runConn = RunService.RenderStepped:Connect(function()
 				StatsData.Timer.Text = timeText
 				if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
 				else StatsData.Timer.TextColor3 = THEME.Text end
+				-- Auto Blatant Mode Logic
 				if seconds and seconds < 5 then
 					isBlatant = true
 				else
@@ -2618,9 +2480,11 @@ runConn = RunService.RenderStepped:Connect(function()
 			lastWordCheck = now
 		end
 		local detected, censored = cachedDetected, cachedCensored
+		-- Auto Read Opponent Words Logic
 		if detected ~= "" and not censored and not isMyTurn then
 			if not UsedWords[detected] then
 				UsedWords[detected] = true
+				-- Optionally notify UI, but let's keep it silent
 			end
 		end
 		if isVisible and isMyTurn and not isTyping and seconds and seconds < 1.5 then
@@ -2718,10 +2582,12 @@ runConn = RunService.RenderStepped:Connect(function()
 		local typeLbl = frame and frame:FindFirstChild("Type")
 		local typeVisible = typeLbl and typeLbl.Visible
 		if typeVisible and not lastTypeVisible then
-			-- Clear UsedWords after 1 second delay
+			StatusText.Text = "New Round - Words Reset"
+			StatusText.TextColor3 = THEME.Success
+			-- Delayed Cache Clear
 			task.delay(1, function()
 				UsedWords = {}
-				ShowToast("Cache Cleared!", "success")
+				ShowToast("Cache Cleared Successfully!", "success")
 			end)
 		end
 		lastTypeVisible = typeVisible
@@ -2825,7 +2691,6 @@ runConn = RunService.RenderStepped:Connect(function()
 		end
 	end)
 end)
-
 inputConn = UserInputService.InputBegan:Connect(function(input)
 	if unloaded then return end
 	if input.KeyCode == TOGGLE_KEY then ScreenGui.Enabled = not ScreenGui.Enabled end
