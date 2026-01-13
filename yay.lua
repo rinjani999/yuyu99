@@ -15,7 +15,7 @@ local GuiService = cloneref(game:GetService("GuiService"))
 local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 local TOGGLE_KEY = Enum.KeyCode.RightControl
 local MIN_CPM = 50
-local MAX_CPM_LEGIT = 10000
+local MAX_CPM_LEGIT = 1500
 local MAX_CPM_BLATANT = 3000
 math.randomseed(os.time())
 local THEME = {
