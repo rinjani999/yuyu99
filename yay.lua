@@ -11,6 +11,9 @@ local Stats = game:GetService("Stats")
 local SoundService = game:GetService("SoundService")
 local TeleportService = game:GetService("TeleportService")
 
+-- Executor Request Handler (Restored from V4 for Compatibility)
+local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+
 -- Protection (Cloneref/Gethui)
 local cloneref = cloneref or function(o) return o end
 local gethui = gethui or function() return CoreGui end
@@ -162,10 +165,7 @@ end
 -- WORD LOGIC & SCORING
 --------------------------------------------------------------------------------
 
--- Request #10: New URL (FIXED FORMAT)
-local DICT_URL = "https://raw.githubusercontent.com/rinjani999/yuyu99/main/tralala.txt"
-
--- (FetchWords moved to bottom to access UI for status updates)
+-- (FetchWords Logic Moved to Bottom)
 
 -- Request #3: New Killer Logic
 local function GetKillerScore(word)
@@ -612,22 +612,57 @@ end)
 -- FETCH & SPAWN
 --------------------------------------------------------------------------------
 
+-- Improved Fetch Words with Fallback
 local function FetchWords()
     StatusLbl.Text = "Downloading Dictionary..."
     StatusLbl.TextColor3 = THEME.Warning
     
-    local content = ""
-    local success, res = pcall(function() return game:HttpGet(DICT_URL) end)
+    -- List of URLs to try in order (Custom -> Raw Custom -> Fallback)
+    local urls = {
+        "https://raw.githubusercontent.com/rinjani999/yuyu99/main/tralala.txt", -- Format Raw Benar
+        "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt", -- Format User Request
+        "https://raw.githubusercontent.com/skrylor/english-words/refs/heads/main/merged_english.txt" -- Fallback V4 Asli
+    }
     
-    if success then
-        content = res
-    elseif isfile("WordHelper_Cache.txt") then
-        content = readfile("WordHelper_Cache.txt")
-        StatusLbl.Text = "Using Cached Dictionary"
+    local content = ""
+    local success = false
+    
+    -- Try to load from cache first if network fails later
+    if isfile("WordHelper_Cache.txt") then
+        local cached = readfile("WordHelper_Cache.txt")
+        if #cached > 100 then
+             content = cached
+             StatusLbl.Text = "Using Cached Dictionary"
+        end
     end
-
-    if success and writefile then
-        writefile("WordHelper_Cache.txt", content)
+    
+    -- Network Fetch Loop
+    for i, url in ipairs(urls) do
+        StatusLbl.Text = "Trying Source #" .. i .. "..."
+        local ok, res = pcall(function() 
+            if request then
+                return request({Url = url, Method = "GET"})
+            else
+                return game:HttpGet(url)
+            end
+        end)
+        
+        if ok then
+            local body = nil
+            if type(res) == "table" and res.Body then
+                body = res.Body
+            elseif type(res) == "string" then
+                body = res
+            end
+            
+            if body and #body > 1000 then -- Valid size check
+                content = body
+                success = true
+                if writefile then writefile("WordHelper_Cache.txt", content) end
+                break
+            end
+        end
+        task.wait(0.5)
     end
 
     State.Words = {}
@@ -647,7 +682,7 @@ local function FetchWords()
         StatusLbl.Text = "Ready! (" .. #State.Words .. " words)"
         StatusLbl.TextColor3 = THEME.Success
     else
-        StatusLbl.Text = "Failed to load words!"
+        StatusLbl.Text = "FAILED! Check Connection/Executor."
         StatusLbl.TextColor3 = THEME.Error
     end
 end
@@ -784,7 +819,7 @@ RunService.RenderStepped:Connect(function()
         StatusLbl.Text = "YOUR TURN! (" .. math.floor(seconds) .. "s)" .. (State.IsBlatantActive and " [PANIC]" or "")
         StatusLbl.TextColor3 = State.IsBlatantActive and THEME.Error or THEME.Success
     else
-        if StatusLbl.Text ~= "Downloading Dictionary..." and StatusLbl.Text ~= "Ready! (" .. #State.Words .. " words)" then
+        if StatusLbl.Text:sub(1,5) ~= "Ready" and StatusLbl.Text:sub(1,5) ~= "Downl" and StatusLbl.Text:sub(1,6) ~= "Trying" and StatusLbl.Text:sub(1,5) ~= "Using" and StatusLbl.Text:sub(1,6) ~= "FAILED" then
             StatusLbl.Text = "Waiting..."
             StatusLbl.TextColor3 = THEME.SubText
         end
