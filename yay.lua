@@ -3,9 +3,11 @@ local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 
-local cloneref = cloneref or function(o) return o end
-local gethui = gethui or function() return CoreGui end
+-- PERBAIKAN: Cek cloneref dengan aman
+local cloneref = (type(cloneref) == "function" and cloneref) or function(o) return o end
+local gethui = (type(gethui) == "function" and gethui) or function() return CoreGui end
 
+-- Redefinisi layanan dengan cloneref yang sudah aman
 local CoreGui = cloneref(game:GetService("CoreGui"))
 local Players = cloneref(game:GetService("Players"))
 local VirtualInputManager = cloneref(game:GetService("VirtualInputManager"))
@@ -15,7 +17,8 @@ local TweenService = cloneref(game:GetService("TweenService"))
 local LogService = cloneref(game:GetService("LogService"))
 local GuiService = cloneref(game:GetService("GuiService"))
 
-local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+-- PERBAIKAN: Fallback jika request tidak support (supaya tidak error nil value nanti)
+local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request or function() return {Body = ""} end
 
 local TOGGLE_KEY = Enum.KeyCode.RightControl
 local MIN_CPM = 50
@@ -1141,6 +1144,28 @@ ManageWordsBtn.Size = UDim2.new(0, 130, 0, 24)
 ManageWordsBtn.Position = UDim2.new(0, 150, 0, 142) -- Adjusted pos
 Instance.new("UICorner", ManageWordsBtn).CornerRadius = UDim.new(0, 4)
 
+-- Tombol Used Words (Posisi 175)
+local UsedWordsBtn = Instance.new("TextButton", TogglesFrame)
+UsedWordsBtn.Text = "Used Words List"
+UsedWordsBtn.Font = Enum.Font.GothamMedium
+UsedWordsBtn.TextSize = 11
+UsedWordsBtn.TextColor3 = Color3.fromRGB(255, 200, 100) -- Warna Oranye Muda
+UsedWordsBtn.BackgroundColor3 = THEME.Background
+UsedWordsBtn.Size = UDim2.new(0, 265, 0, 24)
+UsedWordsBtn.Position = UDim2.new(0, 15, 0, 175)
+Instance.new("UICorner", UsedWordsBtn).CornerRadius = UDim.new(0, 4)
+
+-- Tombol Blacklist Manager (Posisi 205)
+local BlacklistBtn = Instance.new("TextButton", TogglesFrame)
+BlacklistBtn.Text = "Blacklist Manager"
+BlacklistBtn.Font = Enum.Font.GothamMedium
+BlacklistBtn.TextSize = 11
+BlacklistBtn.TextColor3 = Color3.fromRGB(255, 100, 100) -- Warna Merah Muda
+BlacklistBtn.BackgroundColor3 = THEME.Background
+BlacklistBtn.Size = UDim2.new(0, 265, 0, 24)
+BlacklistBtn.Position = UDim2.new(0, 15, 0, 205)
+Instance.new("UICorner", BlacklistBtn).CornerRadius = UDim.new(0, 4)
+
 local WordBrowserBtn = Instance.new("TextButton", TogglesFrame)
 WordBrowserBtn.Text = "Word Browser"
 WordBrowserBtn.Font = Enum.Font.GothamMedium
@@ -1148,7 +1173,7 @@ WordBrowserBtn.TextSize = 11
 WordBrowserBtn.TextColor3 = Color3.fromRGB(200, 150, 255)
 WordBrowserBtn.BackgroundColor3 = THEME.Background
 WordBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-WordBrowserBtn.Position = UDim2.new(0, 15, 0, 175)
+WordBrowserBtn.Position = UDim2.new(0, 15, 0, 235)
 Instance.new("UICorner", WordBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
@@ -1158,7 +1183,7 @@ ServerBrowserBtn.TextSize = 11
 ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
 ServerBrowserBtn.BackgroundColor3 = THEME.Background
 ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
+ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 265)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
@@ -1715,6 +1740,211 @@ do
         WordBrowserFrame.Parent = ScreenGui
     end)
 end
+
+-- ==========================================
+-- WINDOW: USED WORDS LIST
+-- ==========================================
+local UsedWordsFrame = Instance.new("Frame", ScreenGui)
+UsedWordsFrame.Name = "UsedWordsFrame"
+UsedWordsFrame.Size = UDim2.new(0, 250, 0, 350)
+UsedWordsFrame.Position = UDim2.new(0.5, -260, 0.5, -175) -- Di sebelah kiri
+UsedWordsFrame.BackgroundColor3 = THEME.Background
+UsedWordsFrame.Visible = false
+UsedWordsFrame.ClipsDescendants = true
+EnableDragging(UsedWordsFrame) -- Menggunakan fungsi drag yang sudah ada [cite: 31]
+Instance.new("UICorner", UsedWordsFrame).CornerRadius = UDim.new(0, 8)
+local UWStroke = Instance.new("UIStroke", UsedWordsFrame)
+UWStroke.Color = THEME.Accent
+UWStroke.Transparency = 0.5
+UWStroke.Thickness = 2
+
+local UWHeader = Instance.new("TextLabel", UsedWordsFrame)
+UWHeader.Text = "Used Words (Current Round)"
+UWHeader.Font = Enum.Font.GothamBold
+UWHeader.TextSize = 14
+UWHeader.TextColor3 = THEME.Text
+UWHeader.Size = UDim2.new(1, 0, 0, 35)
+UWHeader.BackgroundTransparency = 1
+
+local UWCloseBtn = Instance.new("TextButton", UsedWordsFrame)
+UWCloseBtn.Text = "X"
+UWCloseBtn.Font = Enum.Font.GothamBold
+UWCloseBtn.TextSize = 14
+UWCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+UWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+UWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+UWCloseBtn.BackgroundTransparency = 1
+UWCloseBtn.MouseButton1Click:Connect(function() UsedWordsFrame.Visible = false end)
+
+local UWScroll = Instance.new("ScrollingFrame", UsedWordsFrame)
+UWScroll.Size = UDim2.new(1, -10, 1, -45)
+UWScroll.Position = UDim2.new(0, 5, 0, 40)
+UWScroll.BackgroundTransparency = 1
+UWScroll.ScrollBarThickness = 2
+UWScroll.ScrollBarImageColor3 = THEME.Accent
+UWScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local UWLayout = Instance.new("UIListLayout", UWScroll)
+UWLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UWLayout.Padding = UDim.new(0, 2)
+
+local function RefreshUsedWordsList()
+    -- Bersihkan list lama
+    for _, c in ipairs(UWScroll:GetChildren()) do
+        if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end
+    end
+    
+    local list = {}
+    -- Ambil dari tabel global UsedWords 
+    for w, _ in pairs(UsedWords) do
+        table.insert(list, w)
+    end
+    table.sort(list) -- Urutkan abjad
+
+    for i, w in ipairs(list) do
+        local row = Instance.new("Frame", UWScroll)
+        row.Size = UDim2.new(1, -6, 0, 22)
+        row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+        
+        local lbl = Instance.new("TextLabel", row)
+        lbl.Text = w
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 12
+        lbl.TextColor3 = THEME.SubText
+        lbl.Size = UDim2.new(1, -10, 1, 0)
+        lbl.Position = UDim2.new(0, 10, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+    end
+    UWScroll.CanvasSize = UDim2.new(0, 0, 0, #list * 24)
+    UWHeader.Text = "Used Words (" .. #list .. ")"
+end
+
+UsedWordsBtn.MouseButton1Click:Connect(function()
+    UsedWordsFrame.Visible = not UsedWordsFrame.Visible
+    UsedWordsFrame.Parent = nil
+    UsedWordsFrame.Parent = ScreenGui -- Bring to front
+    if UsedWordsFrame.Visible then
+        RefreshUsedWordsList()
+    end
+end)
+
+
+-- ==========================================
+-- WINDOW: BLACKLIST MANAGER
+-- ==========================================
+local BlacklistFrame = Instance.new("Frame", ScreenGui)
+BlacklistFrame.Name = "BlacklistFrame"
+BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
+BlacklistFrame.Position = UDim2.new(0.5, 10, 0.5, -175) -- Di sebelah kanan
+BlacklistFrame.BackgroundColor3 = THEME.Background
+BlacklistFrame.Visible = false
+BlacklistFrame.ClipsDescendants = true
+EnableDragging(BlacklistFrame)
+Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
+local BLStroke = Instance.new("UIStroke", BlacklistFrame)
+BLStroke.Color = Color3.fromRGB(255, 80, 80) -- Merah untuk blacklist
+BLStroke.Transparency = 0.5
+BLStroke.Thickness = 2
+
+local BLHeader = Instance.new("TextLabel", BlacklistFrame)
+BLHeader.Text = "Blacklist Manager"
+BLHeader.Font = Enum.Font.GothamBold
+BLHeader.TextSize = 14
+BLHeader.TextColor3 = THEME.Text
+BLHeader.Size = UDim2.new(1, 0, 0, 35)
+BLHeader.BackgroundTransparency = 1
+
+local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
+BLCloseBtn.Text = "X"
+BLCloseBtn.Font = Enum.Font.GothamBold
+BLCloseBtn.TextSize = 14
+BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+BLCloseBtn.BackgroundTransparency = 1
+BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
+
+local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
+BLScroll.Size = UDim2.new(1, -10, 1, -45)
+BLScroll.Position = UDim2.new(0, 5, 0, 40)
+BLScroll.BackgroundTransparency = 1
+BLScroll.ScrollBarThickness = 2
+BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
+BLScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local BLLayout = Instance.new("UIListLayout", BLScroll)
+BLLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BLLayout.Padding = UDim.new(0, 2)
+
+local function RefreshBlacklistUI()
+    for _, c in ipairs(BLScroll:GetChildren()) do
+        if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end
+    end
+    
+    local list = {}
+    -- Ambil dari tabel global Blacklist [cite: 6]
+    for w, _ in pairs(Blacklist) do
+        table.insert(list, w)
+    end
+    table.sort(list)
+
+    for i, w in ipairs(list) do
+        local row = Instance.new("Frame", BLScroll)
+        row.Size = UDim2.new(1, -6, 0, 22)
+        row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+        
+        local lbl = Instance.new("TextLabel", row)
+        lbl.Text = w
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 12
+        lbl.TextColor3 = Color3.fromRGB(255, 150, 150)
+        lbl.Size = UDim2.new(1, -30, 1, 0)
+        lbl.Position = UDim2.new(0, 10, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        
+        -- Tombol Hapus (Delete)
+        local del = Instance.new("TextButton", row)
+        del.Text = "Del"
+        del.Font = Enum.Font.GothamBold
+        del.TextSize = 10
+        del.TextColor3 = Color3.fromRGB(255, 80, 80)
+        del.Size = UDim2.new(0, 30, 1, 0)
+        del.Position = UDim2.new(1, -30, 0, 0)
+        del.BackgroundTransparency = 1
+        
+        del.MouseButton1Click:Connect(function()
+            -- Hapus dari tabel memori
+            Blacklist[w] = nil 
+            
+            -- Tulis ulang file blacklist secara keseluruhan (untuk menyimpan perubahan)
+            if writefile then
+                local content = ""
+                for bw, _ in pairs(Blacklist) do
+                    content = content .. bw .. "\n"
+                end
+                writefile(BlacklistFile, content)
+            end
+            
+            ShowToast("Removed from blacklist: " .. w, "success")
+            RefreshBlacklistUI() -- Refresh tampilan
+        end)
+    end
+    BLScroll.CanvasSize = UDim2.new(0, 0, 0, #list * 24)
+    BLHeader.Text = "Blacklist (" .. #list .. ")"
+end
+
+BlacklistBtn.MouseButton1Click:Connect(function()
+    BlacklistFrame.Visible = not BlacklistFrame.Visible
+    BlacklistFrame.Parent = nil
+    BlacklistFrame.Parent = ScreenGui
+    if BlacklistFrame.Visible then
+        RefreshBlacklistUI()
+    end
+end)
 
 local function CalculateDelay()
     local charsPerMin = currentCPM
