@@ -3,9 +3,11 @@ local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 
-local cloneref = cloneref or function(o) return o end
-local gethui = gethui or function() return CoreGui end
+-- PERBAIKAN: Cek cloneref dengan aman
+local cloneref = (type(cloneref) == "function" and cloneref) or function(o) return o end
+local gethui = (type(gethui) == "function" and gethui) or function() return CoreGui end
 
+-- Redefinisi layanan dengan cloneref yang sudah aman
 local CoreGui = cloneref(game:GetService("CoreGui"))
 local Players = cloneref(game:GetService("Players"))
 local VirtualInputManager = cloneref(game:GetService("VirtualInputManager"))
@@ -15,7 +17,8 @@ local TweenService = cloneref(game:GetService("TweenService"))
 local LogService = cloneref(game:GetService("LogService"))
 local GuiService = cloneref(game:GetService("GuiService"))
 
-local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
+-- PERBAIKAN: Fallback jika request tidak support (supaya tidak error nil value nanti)
+local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request or function() return {Body = ""} end
 
 local TOGGLE_KEY = Enum.KeyCode.RightControl
 local MIN_CPM = 50
