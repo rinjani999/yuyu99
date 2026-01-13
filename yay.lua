@@ -1172,25 +1172,33 @@ ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
 ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
--- Tombol Blacklist Manager (Posisi Y: 235, di bawah Server Browser yang ada di 205)
+-- 2. Tombol Menu (Button Logic Updated)
 local BlacklistBtn = Instance.new("TextButton", TogglesFrame)
 BlacklistBtn.Text = "Blacklist Manager"
 BlacklistBtn.Font = Enum.Font.GothamMedium
 BlacklistBtn.TextSize = 11
-BlacklistBtn.TextColor3 = Color3.fromRGB(255, 100, 100) -- Merah muda
+BlacklistBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 BlacklistBtn.BackgroundColor3 = THEME.Background
 BlacklistBtn.Size = UDim2.new(0, 265, 0, 24)
 BlacklistBtn.Position = UDim2.new(0, 15, 0, 235) 
 Instance.new("UICorner", BlacklistBtn).CornerRadius = UDim.new(0, 4)
 
 BlacklistBtn.MouseButton1Click:Connect(function()
-    BlacklistFrame.Visible = not BlacklistFrame.Visible
-    BlacklistFrame.Parent = nil
-    BlacklistFrame.Parent = ScreenGui -- Bawa ke depan
-    if BlacklistFrame.Visible then
-        RefreshBlacklistUI()
+    -- Menggunakan pcall untuk menangkap error jika ada
+    local s, e = pcall(function()
+        BlacklistFrame.Visible = not BlacklistFrame.Visible
+        if BlacklistFrame.Visible then
+            -- Pastikan frame ditarik ke depan ScreenGui
+            if ScreenGui then BlacklistFrame.Parent = ScreenGui end
+            RefreshBlacklistUI()
+        end
+    end)
+    if not s then 
+        warn("Gagal membuka Blacklist Manager: " .. tostring(e)) 
+        if ShowToast then ShowToast("Error GUI (Cek Console F9)", "error") end
     end
 end)
+-- === AKHIR KODE PERBAIKAN ===
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
@@ -1746,18 +1754,23 @@ do
         WordBrowserFrame.Parent = ScreenGui
     end)
 end
--- UI: Blacklist Manager Frame
+
+-- === MULAI KODE PERBAIKAN BLACKLIST MANAGER ===
+
+-- 1. UI Frame (Updated dengan ZIndex tinggi)
 local BlacklistFrame = Instance.new("Frame", ScreenGui)
 BlacklistFrame.Name = "BlacklistManager"
 BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
-BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175) -- Muncul di sebelah kanan
+BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175) 
 BlacklistFrame.BackgroundColor3 = THEME.Background
 BlacklistFrame.Visible = false
 BlacklistFrame.ClipsDescendants = true
-EnableDragging(BlacklistFrame) -- Menggunakan fungsi drag yang sudah ada
+BlacklistFrame.ZIndex = 200 -- PRIORITY: Agar selalu muncul di paling atas
+if EnableDragging then EnableDragging(BlacklistFrame) end 
+
 Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
 local BLStroke = Instance.new("UIStroke", BlacklistFrame)
-BLStroke.Color = Color3.fromRGB(255, 80, 80) -- Warna merah agar beda
+BLStroke.Color = Color3.fromRGB(255, 80, 80)
 BLStroke.Transparency = 0.5
 BLStroke.Thickness = 2
 
@@ -1769,6 +1782,7 @@ BLHeader.TextSize = 14
 BLHeader.TextColor3 = THEME.Text
 BLHeader.Size = UDim2.new(1, 0, 0, 35)
 BLHeader.BackgroundTransparency = 1
+BLHeader.ZIndex = 201 -- Di atas frame
 
 -- Tombol Close
 local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
@@ -1779,9 +1793,10 @@ BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
 BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
 BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
 BLCloseBtn.BackgroundTransparency = 1
+BLCloseBtn.ZIndex = 202
 BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
 
--- Search Box untuk Blacklist
+-- Search Box
 local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
 BLSearchBox.Font = Enum.Font.Gotham
 BLSearchBox.TextSize = 12
@@ -1791,6 +1806,7 @@ BLSearchBox.PlaceholderText = "Search blacklist..."
 BLSearchBox.PlaceholderColor3 = THEME.SubText
 BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
 BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
+BLSearchBox.ZIndex = 202
 Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
 
 -- Scrolling List
@@ -1801,6 +1817,7 @@ BLScroll.BackgroundTransparency = 1
 BLScroll.ScrollBarThickness = 2
 BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
 BLScroll.CanvasSize = UDim2.new(0,0,0,0)
+BLScroll.ZIndex = 202
 
 local BLListLayout = Instance.new("UIListLayout", BLScroll)
 BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1808,60 +1825,70 @@ BLListLayout.Padding = UDim.new(0, 2)
 
 -- Fungsi Refresh List
 local function RefreshBlacklistUI()
-    -- Bersihkan list lama
-    for _, c in ipairs(BLScroll:GetChildren()) do
-        if c:IsA("Frame") then c:Destroy() end
-    end
-    
-    local query = BLSearchBox.Text:lower():gsub("[%s%c]+", "")
-    local shownCount = 0
-    local sortedList = {}
-    
-    -- Konversi dictionary ke array untuk sorting
-    for w, _ in pairs(Blacklist) do
-        table.insert(sortedList, w)
-    end
-    table.sort(sortedList)
-
-    for i, w in ipairs(sortedList) do
-        if query == "" or w:find(query, 1, true) then
-            shownCount = shownCount + 1
-            
-            local row = Instance.new("Frame", BLScroll)
-            row.Size = UDim2.new(1, -6, 0, 22)
-            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
-            row.BorderSizePixel = 0
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-            
-            local lbl = Instance.new("TextLabel", row)
-            lbl.Text = w
-            lbl.Font = Enum.Font.Gotham
-            lbl.TextSize = 12
-            lbl.TextColor3 = THEME.Text
-            lbl.Size = UDim2.new(1, -30, 1, 0)
-            lbl.Position = UDim2.new(0, 5, 0, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-
-            -- Tombol Delete
-            local del = Instance.new("TextButton", row)
-            del.Text = "X"
-            del.Font = Enum.Font.GothamBold
-            del.TextSize = 11
-            del.TextColor3 = Color3.fromRGB(255, 80, 80)
-            del.Size = UDim2.new(0, 22, 1, 0)
-            del.Position = UDim2.new(1, -22, 0, 0)
-            del.BackgroundTransparency = 1
-            
-            del.MouseButton1Click:Connect(function()
-                Blacklist[w] = nil -- Hapus dari memori
-                SaveFullBlacklist() -- Simpan perubahan ke file
-                RefreshBlacklistUI() -- Refresh UI
-                ShowToast("Un-blacklisted: " .. w, "success")
-            end)
+    local success, err = pcall(function()
+        -- Bersihkan list lama
+        for _, c in ipairs(BLScroll:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
         end
-    end
-    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+        
+        local query = BLSearchBox.Text:lower():gsub("[%s%c]+", "")
+        local shownCount = 0
+        local sortedList = {}
+        
+        -- Cek apakah Blacklist ada
+        if not Blacklist then return end
+
+        for w, _ in pairs(Blacklist) do
+            table.insert(sortedList, w)
+        end
+        table.sort(sortedList)
+
+        for i, w in ipairs(sortedList) do
+            if query == "" or w:find(query, 1, true) then
+                shownCount = shownCount + 1
+                
+                local row = Instance.new("Frame", BLScroll)
+                row.Size = UDim2.new(1, -6, 0, 22)
+                row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+                row.BorderSizePixel = 0
+                row.ZIndex = 203
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+                
+                local lbl = Instance.new("TextLabel", row)
+                lbl.Text = w
+                lbl.Font = Enum.Font.Gotham
+                lbl.TextSize = 12
+                lbl.TextColor3 = THEME.Text
+                lbl.Size = UDim2.new(1, -30, 1, 0)
+                lbl.Position = UDim2.new(0, 5, 0, 0)
+                lbl.BackgroundTransparency = 1
+                lbl.TextXAlignment = Enum.TextXAlignment.Left
+                lbl.ZIndex = 204
+
+                -- Tombol Delete
+                local del = Instance.new("TextButton", row)
+                del.Text = "X"
+                del.Font = Enum.Font.GothamBold
+                del.TextSize = 11
+                del.TextColor3 = Color3.fromRGB(255, 80, 80)
+                del.Size = UDim2.new(0, 22, 1, 0)
+                del.Position = UDim2.new(1, -22, 0, 0)
+                del.BackgroundTransparency = 1
+                del.ZIndex = 204
+                
+                del.MouseButton1Click:Connect(function()
+                    Blacklist[w] = nil 
+                    if SaveFullBlacklist then SaveFullBlacklist() end
+                    RefreshBlacklistUI()
+                    if ShowToast then ShowToast("Un-blacklisted: " .. w, "success") end
+                end)
+                
+                row.Parent = BLScroll
+            end
+        end
+        BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+    end)
+    if not success then warn("Error Refresh UI: " .. tostring(err)) end
 end
 
 BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklistUI)
