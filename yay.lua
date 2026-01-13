@@ -185,11 +185,9 @@ logConn = LogService.MessageOut:Connect(function(message, type)
 	end
 end)
 
--- Updated URL
 local url = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
 local fileName = "ultimate_words_v4.txt"
 
--- Loading UI
 local LoadingGui = Instance.new("ScreenGui")
 LoadingGui.Name = "WordHelperLoading"
 local success, parent = pcall(function() return gethui() end)
@@ -1188,7 +1186,6 @@ UsedWordsBtn.Position = UDim2.new(0, 15, 0, 145)
 Instance.new("UICorner", UsedWordsBtn).CornerRadius = UDim.new(0, 4)
 UsedWordsBtn.MouseButton1Click:Connect(function()
 	UsedWordsFrame.Visible = not UsedWordsFrame.Visible
-	UsedWordsFrame.Parent = nil
 	UsedWordsFrame.Parent = ScreenGui
 	RefreshUsedWords()
 end)
@@ -1268,6 +1265,7 @@ local function RefreshBlacklist()
 		del.BackgroundTransparency = 1
 		del.MouseButton1Click:Connect(function()
 			Blacklist[word] = nil
+			AddToBlacklist(word) -- will re-add if needed, but here we just remove from memory
 			if isfile and isfile(BlacklistFile) then
 				local lines = {}
 				for line in readfile(BlacklistFile):gmatch("[^\r\n]+") do
@@ -1292,7 +1290,6 @@ BlacklistBtn.Position = UDim2.new(0, 15, 0, 172)
 Instance.new("UICorner", BlacklistBtn).CornerRadius = UDim.new(0, 4)
 BlacklistBtn.MouseButton1Click:Connect(function()
 	BlacklistFrame.Visible = not BlacklistFrame.Visible
-	BlacklistFrame.Parent = nil
 	BlacklistFrame.Parent = ScreenGui
 	RefreshBlacklist()
 end)
@@ -1341,7 +1338,6 @@ CWCloseBtn.MouseButton1Click:Connect(function() CustomWordsFrame.Visible = false
 
 ManageWordsBtn.MouseButton1Click:Connect(function()
 	CustomWordsFrame.Visible = not CustomWordsFrame.Visible
-	CustomWordsFrame.Parent = nil
 	CustomWordsFrame.Parent = ScreenGui
 end)
 
@@ -1646,7 +1642,6 @@ SBRefresh.MouseButton1Click:Connect(FetchServers)
 
 ServerBrowserBtn.MouseButton1Click:Connect(function()
 	ServerFrame.Visible = not ServerFrame.Visible
-	ServerFrame.Parent = nil
 	ServerFrame.Parent = ScreenGui
 	if ServerFrame.Visible then
 		FetchServers()
@@ -1805,7 +1800,6 @@ do
 
 	WordBrowserBtn.MouseButton1Click:Connect(function()
 		WordBrowserFrame.Visible = not WordBrowserFrame.Visible
-		WordBrowserFrame.Parent = nil
 		WordBrowserFrame.Parent = ScreenGui
 	end)
 end
@@ -2724,7 +2718,7 @@ runConn = RunService.RenderStepped:Connect(function()
 		local typeLbl = frame and frame:FindFirstChild("Type")
 		local typeVisible = typeLbl and typeLbl.Visible
 		if typeVisible and not lastTypeVisible then
-			-- Clear cache after 1 second delay
+			-- Clear UsedWords after 1 second delay
 			task.delay(1, function()
 				UsedWords = {}
 				ShowToast("Cache Cleared!", "success")
