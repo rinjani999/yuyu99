@@ -671,7 +671,6 @@ SlidersFrame.Size = UDim2.new(1, 0, 0, 125)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
--- Changed size from 310 to 185 to account for removed buttons
 TogglesFrame.Size = UDim2.new(1, 0, 0, 185) 
 TogglesFrame.Position = UDim2.new(0, 0, 0, 125)
 TogglesFrame.BackgroundTransparency = 1
@@ -688,7 +687,6 @@ local function UpdateLayout()
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -245)})
         TogglesFrame.Visible = false
     else
-        -- Changed size from 435 to 310 to account for removed buttons
         Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 310), Position = UDim2.new(0, 0, 1, -310)})
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -430)})
         TogglesFrame.Visible = true
@@ -1168,8 +1166,6 @@ end)
 RiskyBtn.TextColor3 = riskyMistakes and Color3.fromRGB(255, 80, 80) or THEME.SubText
 RiskyBtn.Size = UDim2.new(0, 130, 0, 24)
 
--- REMOVED BUTTONS HERE (Manage Custom Words, Word Browser, Server Browser, Blacklist Manager)
-
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
     local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
@@ -1506,13 +1502,18 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             if not accepted then
                 -- Logika penanganan kegagalan (Blacklist vs UsedWords)
                 local finalStrikes = GetStrikeCount()
-                if finalStrikes > initialStrikes then
-                    Blacklist[targetWord] = true
-                    SaveBlacklist()
-                    ShowToast("Invalid Word (Blacklisted)", "error")
+                if UsedWords[targetWord] then
+                     ShowToast("Already used (Race Condition)!", "warning")
                 else
-                    UsedWords[targetWord] = true
-                    ShowToast("Already used!", "warning")
+                     -- Jika tidak ditemukan di UsedWords dan ditolak, asumsikan invalid
+                     Blacklist[targetWord] = true
+                     SaveBlacklist()
+                     
+                     if finalStrikes > initialStrikes then
+                         ShowToast("Invalid Word (Strike Detected)", "error")
+                     else
+                         ShowToast("Invalid Word (Rejected)", "error")
+                     end
                 end
 
                 RandomPriority[targetWord] = nil
@@ -1677,13 +1678,18 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
 
                 local finalStrikes = GetStrikeCount()
-                if finalStrikes > initialStrikes then
-                    Blacklist[targetWord] = true
-                    SaveBlacklist()
-                    ShowToast("Invalid Word (Blacklisted)", "error")
+                if UsedWords[targetWord] then
+                     ShowToast("Already used (Race Condition)!", "warning")
                 else
-                    UsedWords[targetWord] = true
-                    ShowToast("Already used!", "warning")
+                     -- Jika ditolak dan tidak ada di UsedWords, kemungkinan besar INVALID
+                     Blacklist[targetWord] = true
+                     SaveBlacklist()
+                     
+                     if finalStrikes > initialStrikes then
+                         ShowToast("Invalid Word (Strike Detected)", "error")
+                     else
+                         ShowToast("Invalid Word (Rejected)", "error")
+                     end
                 end
 
                 for k, list in pairs(RandomOrderCache) do
