@@ -40,12 +40,11 @@ local function ColorToRGB(c)
     return string.format("%d,%d,%d", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 end
 
-local ConfigFile = "WordHelper_Config_V2.json"
-local BlacklistFile = "blacklist.json"
+local ConfigFile = "WordHelper_Config_V5.json"
 
 local Config = {
     CPM = 550,
-    Blatant = false,
+    Blatant = false, -- Bisa boolean atau string "Auto"
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -59,8 +58,6 @@ local Config = {
         _8p = true
     },
     PanicMode = true,
-    PanicInterval = 3, -- [NEW] Default 3s
-    AutoBlatantTimer = 5, -- [NEW] Default 5s
     ShowKeyboard = false,
     ErrorRate = 5,
     ThinkDelay = 0.8,
@@ -68,30 +65,13 @@ local Config = {
     CustomWords = {},
     MinTypeSpeed = 50,
     MaxTypeSpeed = 3000,
-    KeyboardLayout = "QWERTY"
+    KeyboardLayout = "QWERTY",
+    PanicTime = 4,      -- Slider 1-14s
+    AutoBlatantTime = 5 -- Slider 1-14s
 }
 
--- === SYSTEM BLACKLIST ===
-local Blacklist = {}
+-- === SYSTEM USED WORDS ===
 local UsedWords = {} -- Cache sementara untuk ronde ini
-
-local function SaveBlacklist()
-    if writefile then
-        writefile(BlacklistFile, HttpService:JSONEncode(Blacklist))
-    end
-end
-
-local function LoadBlacklist()
-    if isfile and isfile(BlacklistFile) then
-        local success, decoded = pcall(function() 
-            return HttpService:JSONDecode(readfile(BlacklistFile)) 
-        end)
-        if success and decoded then
-            Blacklist = decoded
-        end
-    end
-end
-LoadBlacklist()
 
 local function SaveConfig()
     if writefile then
@@ -124,9 +104,8 @@ local errorRate = Config.ErrorRate
 local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
--- [NEW] Local variables for sliders
-local panicInterval = Config.PanicInterval or 3
-local autoBlatantTimer = Config.AutoBlatantTimer or 5
+local panicTimeThreshold = Config.PanicTime or 4
+local autoBlatantThreshold = Config.AutoBlatantTime or 5
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -138,6 +117,7 @@ local unloaded = false
 local isMyTurnLogDetected = false
 local logRequiredLetters = ""
 local turnExpiryTime = 0
+local isPanicActive = false -- Flag global untuk panic mode
 
 local RandomOrderCache = {}
 local RandomPriority = {}
@@ -161,9 +141,6 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
-
--- [NEW] Variable to force panic speed
-local forcePanicSpeed = false
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -200,7 +177,7 @@ LStroke.Thickness = 2
 local LoadingTitle = Instance.new("TextLabel", LoadingFrame)
 LoadingTitle.Size = UDim2.new(1, 0, 0, 40)
 LoadingTitle.BackgroundTransparency = 1
-LoadingTitle.Text = "WordHelper V4"
+LoadingTitle.Text = "WordHelper V5"
 LoadingTitle.TextColor3 = THEME.Accent
 LoadingTitle.Font = Enum.Font.GothamBold
 LoadingTitle.TextSize = 18
@@ -393,6 +370,7 @@ local function GetStrikeCount()
     local gui = player and player:FindFirstChild("PlayerGui")
     local inGame = gui and gui:FindFirstChild("InGame")
     local frame = inGame and inGame:FindFirstChild("Frame")
+    
     local livesContainer = frame and (frame:FindFirstChild("Lives") or frame:FindFirstChild("Strikes") or frame:FindFirstChild("LifeContainer"))
     
     if not livesContainer then return 0 end
@@ -411,15 +389,22 @@ local function GetStrikeCount()
 end
 
 local function GetSecureParent()
-    local success, result = pcall(function() return gethui() end)
+    local success, result = pcall(function()
+        return gethui()
+    end)
     if success and result then return result end
-    success, result = pcall(function() return CoreGui end)
+    
+    success, result = pcall(function()
+        return CoreGui
+    end)
     if success and result then return result end
+    
     return Players.LocalPlayer.PlayerGui
 end
 
 local ParentTarget = GetSecureParent()
 local GuiName = tostring(math.random(1000000, 9999999))
+
 local env = (getgenv and getgenv()) or _G
 
 if env.WordHelperInstance and env.WordHelperInstance.Parent then
@@ -503,18 +488,32 @@ local function EnableDragging(frame)
         local delta = input.Position - dragStart
         frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
+    
     frame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
             startPos = frame.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
     end)
+    
     frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
     end)
-    UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then Update(input) end end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            Update(input)
+        end
+    end)
 end
 
 EnableDragging(MainFrame)
@@ -531,7 +530,7 @@ Header.BackgroundColor3 = THEME.ItemBG
 Header.BorderSizePixel = 0
 
 local Title = Instance.new("TextLabel", Header)
-Title.Text = "Word<font color=\"rgb(114,100,255)\">Helper</font> V4"
+Title.Text = "Word<font color=\"rgb(114,100,255)\">Helper</font> V5"
 Title.RichText = true
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 18
@@ -564,8 +563,10 @@ CloseBtn.MouseButton1Click:Connect(function()
     if runConn then runConn:Disconnect() runConn = nil end
     if inputConn then inputConn:Disconnect() inputConn = nil end
     if logConn then logConn:Disconnect() logConn = nil end
+    
     for _, btn in ipairs(ButtonCache) do btn:Destroy() end
     table.clear(ButtonCache)
+
     if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
 end)
 
@@ -610,7 +611,9 @@ SearchBox.Text = ""
 SearchBox.TextXAlignment = Enum.TextXAlignment.Left
 
 SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    if UpdateList then UpdateList(lastDetected, lastRequiredLetter) end
+    if UpdateList then
+        UpdateList(lastDetected, lastRequiredLetter)
+    end
 end)
 
 local ScrollList = Instance.new("ScrollingFrame", MainFrame)
@@ -630,14 +633,13 @@ SettingsFrame.BackgroundColor3 = THEME.ItemBG
 SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
--- [MODIFIED] Increased SlidersFrame size to accommodate new sliders
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 185) -- Adjusted height from 125 to 185
+SlidersFrame.Size = UDim2.new(1, 0, 0, 175) -- Increased height for new sliders
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
-TogglesFrame.Size = UDim2.new(1, 0, 0, 310)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 185) -- Adjusted from 125
+TogglesFrame.Size = UDim2.new(1, 0, 0, 260)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 175)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -648,14 +650,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        -- Collapsed state
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 175), Position = UDim2.new(0, 0, 1, -175)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -295)})
         TogglesFrame.Visible = false
     else
-        -- Expanded state
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 435), Position = UDim2.new(0, 0, 1, -435)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -555)})
         TogglesFrame.Visible = true
     end
 end
@@ -689,6 +689,8 @@ local function SetupSlider(btn, bg, fill, callback)
             Config.CPM = currentCPM
             Config.ErrorRate = errorRate
             Config.ThinkDelay = thinkDelayCurrent
+            Config.PanicTime = panicTimeThreshold
+            Config.AutoBlatantTime = autoBlatantThreshold
         end
         Update()
         move = RunService.RenderStepped:Connect(Update)
@@ -722,6 +724,7 @@ local function CreateKey(char, pos, size)
     k.Position = pos
     k.BackgroundColor3 = THEME.ItemBG
     Instance.new("UICorner", k).CornerRadius = UDim.new(0, 4)
+    
     local l = Instance.new("TextLabel", k)
     l.Size = UDim2.new(1,0,1,0)
     l.BackgroundTransparency = 1
@@ -729,30 +732,51 @@ local function CreateKey(char, pos, size)
     l.TextColor3 = THEME.Text
     l.Font = Enum.Font.GothamBold
     l.TextSize = 14
+    
     Keys[char:lower()] = k
     return k
 end
 
 local function GenerateKeyboard()
-    for _, c in ipairs(KeyboardFrame:GetChildren()) do if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end end
+    for _, c in ipairs(KeyboardFrame:GetChildren()) do
+        if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
+    end
     Keys = {}
+    
     local rows
     if keyboardLayout == "QWERTZ" then
-        rows = {{"q","w","e","r","t","z","u","i","o","p"},{"a","s","d","f","g","h","j","k","l"},{"y","x","c","v","b","n","m"}}
+        rows = {
+            {"q","w","e","r","t","z","u","i","o","p"},
+            {"a","s","d","f","g","h","j","k","l"},
+            {"y","x","c","v","b","n","m"}
+        }
     elseif keyboardLayout == "AZERTY" then
-        rows = {{"a","z","e","r","t","y","u","i","o","p"},{"q","s","d","f","g","h","j","k","l","m"},{"w","x","c","v","b","n"}}
+        rows = {
+            {"a","z","e","r","t","y","u","i","o","p"},
+            {"q","s","d","f","g","h","j","k","l","m"},
+            {"w","x","c","v","b","n"}
+        }
     else -- QWERTY
-        rows = {{"q","w","e","r","t","y","u","i","o","p"},{"a","s","d","f","g","h","j","k","l"},{"z","x","c","v","b","n","m"}}
+        rows = {
+            {"q","w","e","r","t","y","u","i","o","p"},
+            {"a","s","d","f","g","h","j","k","l"},
+            {"z","x","c","v","b","n","m"}
+        }
     end
+    
     local startY = 15
+    local spacing = 35
     for r, rowChars in ipairs(rows) do
         local rowWidth = #rowChars * 35
         local startX = (400 - rowWidth) / 2
-        for i, char in ipairs(rowChars) do CreateKey(char, UDim2.new(0, startX + (i-1)*35, 0, startY + (r-1)*35)) end
+        for i, char in ipairs(rowChars) do
+            CreateKey(char, UDim2.new(0, startX + (i-1)*35, 0, startY + (r-1)*35))
+        end
     end
     local space = CreateKey(" ", UDim2.new(0.5, -100, 0, startY + 3*35), UDim2.new(0, 200, 0, 30))
     space.FindFirstChild(space, "TextLabel").Text = "SPACE"
 end
+
 GenerateKeyboard()
 
 local function CreateDropdown(parent, text, options, default, callback)
@@ -761,6 +785,7 @@ local function CreateDropdown(parent, text, options, default, callback)
     container.BackgroundColor3 = THEME.Background
     container.ZIndex = 10
     Instance.new("UICorner", container).CornerRadius = UDim.new(0, 4)
+    
     local mainBtn = Instance.new("TextButton", container)
     mainBtn.Size = UDim2.new(1, 0, 1, 0)
     mainBtn.BackgroundTransparency = 1
@@ -769,6 +794,7 @@ local function CreateDropdown(parent, text, options, default, callback)
     mainBtn.TextSize = 11
     mainBtn.TextColor3 = THEME.Accent
     mainBtn.ZIndex = 11
+
     local listFrame = Instance.new("Frame", container)
     listFrame.Size = UDim2.new(1, 0, 0, #options * 24)
     listFrame.Position = UDim2.new(0, 0, 1, 2)
@@ -776,8 +802,14 @@ local function CreateDropdown(parent, text, options, default, callback)
     listFrame.Visible = false
     listFrame.ZIndex = 20
     Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 4)
+    
     local isOpen = false
-    mainBtn.MouseButton1Click:Connect(function() isOpen = not isOpen listFrame.Visible = isOpen end)
+    
+    mainBtn.MouseButton1Click:Connect(function()
+        isOpen = not isOpen
+        listFrame.Visible = isOpen
+    end)
+    
     for i, opt in ipairs(options) do
         local btn = Instance.new("TextButton", listFrame)
         btn.Size = UDim2.new(1, 0, 0, 24)
@@ -788,8 +820,15 @@ local function CreateDropdown(parent, text, options, default, callback)
         btn.TextSize = 11
         btn.TextColor3 = THEME.Text
         btn.ZIndex = 21
-        btn.MouseButton1Click:Connect(function() mainBtn.Text = text .. ": " .. opt isOpen = false listFrame.Visible = false callback(opt) end)
+        
+        btn.MouseButton1Click:Connect(function()
+            mainBtn.Text = text .. ": " .. opt
+            isOpen = false
+            listFrame.Visible = false
+            callback(opt)
+        end)
     end
+    
     return container
 end
 
@@ -805,8 +844,12 @@ UserInputService.InputBegan:Connect(function(input)
     if not showKeyboard then return end
     if input.UserInputType == Enum.UserInputType.Keyboard then
         local char = input.KeyCode.Name:lower()
-        if Keys[char] then Tween(Keys[char], {BackgroundColor3 = THEME.Accent}, 0.1) end
-        if input.KeyCode == Enum.KeyCode.Space then Tween(Keys[" "], {BackgroundColor3 = THEME.Accent}, 0.1) end
+        if Keys[char] then
+            Tween(Keys[char], {BackgroundColor3 = THEME.Accent}, 0.1)
+        end
+        if input.KeyCode == Enum.KeyCode.Space then
+            Tween(Keys[" "], {BackgroundColor3 = THEME.Accent}, 0.1)
+        end
     end
 end)
 
@@ -814,8 +857,12 @@ UserInputService.InputEnded:Connect(function(input)
     if not showKeyboard then return end
     if input.UserInputType == Enum.UserInputType.Keyboard then
         local char = input.KeyCode.Name:lower()
-        if Keys[char] then Tween(Keys[char], {BackgroundColor3 = THEME.ItemBG}, 0.2) end
-        if input.KeyCode == Enum.KeyCode.Space then Tween(Keys[" "], {BackgroundColor3 = THEME.ItemBG}, 0.2) end
+        if Keys[char] then
+            Tween(Keys[char], {BackgroundColor3 = THEME.ItemBG}, 0.2)
+        end
+        if input.KeyCode == Enum.KeyCode.Space then
+            Tween(Keys[" "], {BackgroundColor3 = THEME.ItemBG}, 0.2)
+        end
     end
 end)
 
@@ -825,19 +872,21 @@ SliderLabel.Font = Enum.Font.GothamMedium
 SliderLabel.TextSize = 12
 SliderLabel.TextColor3 = THEME.SubText
 SliderLabel.Size = UDim2.new(1, -30, 0, 20)
-SliderLabel.Position = UDim2.new(0, 15, 0, 8)
+SliderLabel.Position = UDim2.new(0, 15, 0, 5)
 SliderLabel.BackgroundTransparency = 1
 SliderLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local SliderBg = Instance.new("Frame", SlidersFrame)
 SliderBg.Size = UDim2.new(1, -30, 0, 6)
-SliderBg.Position = UDim2.new(0, 15, 0, 30)
+SliderBg.Position = UDim2.new(0, 15, 0, 25)
 SliderBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
+
 local SliderFill = Instance.new("Frame", SliderBg)
 SliderFill.Size = UDim2.new(0.5, 0, 1, 0)
 SliderFill.BackgroundColor3 = THEME.Accent
 Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
+
 local SliderBtn = Instance.new("TextButton", SliderBg)
 SliderBtn.Size = UDim2.new(1,0,1,0)
 SliderBtn.BackgroundTransparency = 1
@@ -849,19 +898,21 @@ ErrorLabel.Font = Enum.Font.GothamMedium
 ErrorLabel.TextSize = 11
 ErrorLabel.TextColor3 = THEME.SubText
 ErrorLabel.Size = UDim2.new(1, -30, 0, 18)
-ErrorLabel.Position = UDim2.new(0, 15, 0, 36)
+ErrorLabel.Position = UDim2.new(0, 15, 0, 31)
 ErrorLabel.BackgroundTransparency = 1
 ErrorLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local ErrorBg = Instance.new("Frame", SlidersFrame)
 ErrorBg.Size = UDim2.new(1, -30, 0, 6)
-ErrorBg.Position = UDim2.new(0, 15, 0, 56)
+ErrorBg.Position = UDim2.new(0, 15, 0, 49)
 ErrorBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", ErrorBg).CornerRadius = UDim.new(1, 0)
+
 local ErrorFill = Instance.new("Frame", ErrorBg)
 ErrorFill.Size = UDim2.new(errorRate/30, 0, 1, 0)
 ErrorFill.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
 Instance.new("UICorner", ErrorFill).CornerRadius = UDim.new(1, 0)
+
 local ErrorBtn = Instance.new("TextButton", ErrorBg)
 ErrorBtn.Size = UDim2.new(1,0,1,0)
 ErrorBtn.BackgroundTransparency = 1
@@ -880,20 +931,22 @@ ThinkLabel.Font = Enum.Font.GothamMedium
 ThinkLabel.TextSize = 11
 ThinkLabel.TextColor3 = THEME.SubText
 ThinkLabel.Size = UDim2.new(1, -30, 0, 18)
-ThinkLabel.Position = UDim2.new(0, 15, 0, 62)
+ThinkLabel.Position = UDim2.new(0, 15, 0, 55)
 ThinkLabel.BackgroundTransparency = 1
 ThinkLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local ThinkBg = Instance.new("Frame", SlidersFrame)
 ThinkBg.Size = UDim2.new(1, -30, 0, 6)
-ThinkBg.Position = UDim2.new(0, 15, 0, 82)
+ThinkBg.Position = UDim2.new(0, 15, 0, 73)
 ThinkBg.BackgroundColor3 = THEME.Slider
 Instance.new("UICorner", ThinkBg).CornerRadius = UDim.new(1, 0)
+
 local ThinkFill = Instance.new("Frame", ThinkBg)
 local thinkPct = (thinkDelayCurrent - thinkDelayMin) / (thinkDelayMax - thinkDelayMin)
 ThinkFill.Size = UDim2.new(thinkPct, 0, 1, 0)
 ThinkFill.BackgroundColor3 = THEME.Accent
 Instance.new("UICorner", ThinkFill).CornerRadius = UDim.new(1, 0)
+
 local ThinkBtn = Instance.new("TextButton", ThinkBg)
 ThinkBtn.Size = UDim2.new(1,0,1,0)
 ThinkBtn.BackgroundTransparency = 1
@@ -906,69 +959,74 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 end)
 
--- [NEW] PANIC SLIDER (1-14s)
-local PanicLabel = Instance.new("TextLabel", SlidersFrame)
-PanicLabel.Text = "Panic Timer: " .. panicInterval .. "s"
-PanicLabel.Font = Enum.Font.GothamMedium
-PanicLabel.TextSize = 11
-PanicLabel.TextColor3 = THEME.SubText
-PanicLabel.Size = UDim2.new(1, -30, 0, 18)
-PanicLabel.Position = UDim2.new(0, 15, 0, 88)
-PanicLabel.BackgroundTransparency = 1
-PanicLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- [NEW] PANIC TIME SLIDER
+local PanicTimeLabel = Instance.new("TextLabel", SlidersFrame)
+PanicTimeLabel.Text = "Panic Time: " .. panicTimeThreshold .. "s"
+PanicTimeLabel.Font = Enum.Font.GothamMedium
+PanicTimeLabel.TextSize = 11
+PanicTimeLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+PanicTimeLabel.Size = UDim2.new(1, -30, 0, 18)
+PanicTimeLabel.Position = UDim2.new(0, 15, 0, 79)
+PanicTimeLabel.BackgroundTransparency = 1
+PanicTimeLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-local PanicBg = Instance.new("Frame", SlidersFrame)
-PanicBg.Size = UDim2.new(1, -30, 0, 6)
-PanicBg.Position = UDim2.new(0, 15, 0, 108)
-PanicBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", PanicBg).CornerRadius = UDim.new(1, 0)
-local PanicFill = Instance.new("Frame", PanicBg)
-PanicFill.Size = UDim2.new((panicInterval-1)/13, 0, 1, 0)
-PanicFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-Instance.new("UICorner", PanicFill).CornerRadius = UDim.new(1, 0)
-local PanicBtn = Instance.new("TextButton", PanicBg)
-PanicBtn.Size = UDim2.new(1,0,1,0)
-PanicBtn.BackgroundTransparency = 1
-PanicBtn.Text = ""
+local PanicTimeBg = Instance.new("Frame", SlidersFrame)
+PanicTimeBg.Size = UDim2.new(1, -30, 0, 6)
+PanicTimeBg.Position = UDim2.new(0, 15, 0, 97)
+PanicTimeBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", PanicTimeBg).CornerRadius = UDim.new(1, 0)
 
-SetupSlider(PanicBtn, PanicBg, PanicFill, function(pct)
-    panicInterval = 1 + math.floor(pct * 13) -- Range 1-14
-    Config.PanicInterval = panicInterval
-    PanicFill.Size = UDim2.new(pct, 0, 1, 0)
-    PanicLabel.Text = "Panic Timer: " .. panicInterval .. "s"
+local PanicTimeFill = Instance.new("Frame", PanicTimeBg)
+PanicTimeFill.Size = UDim2.new((panicTimeThreshold-1)/13, 0, 1, 0)
+PanicTimeFill.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+Instance.new("UICorner", PanicTimeFill).CornerRadius = UDim.new(1, 0)
+
+local PanicTimeBtn = Instance.new("TextButton", PanicTimeBg)
+PanicTimeBtn.Size = UDim2.new(1,0,1,0)
+PanicTimeBtn.BackgroundTransparency = 1
+PanicTimeBtn.Text = ""
+
+SetupSlider(PanicTimeBtn, PanicTimeBg, PanicTimeFill, function(pct)
+    panicTimeThreshold = 1 + math.floor(pct * 13) -- Range 1-14
+    Config.PanicTime = panicTimeThreshold
+    PanicTimeFill.Size = UDim2.new(pct, 0, 1, 0)
+    PanicTimeLabel.Text = "Panic Time: " .. panicTimeThreshold .. "s"
 end)
 
--- [NEW] AUTO BLATANT SLIDER (1-14s)
-local BlatantTimerLabel = Instance.new("TextLabel", SlidersFrame)
-BlatantTimerLabel.Text = "Blatant Timer: " .. autoBlatantTimer .. "s"
-BlatantTimerLabel.Font = Enum.Font.GothamMedium
-BlatantTimerLabel.TextSize = 11
-BlatantTimerLabel.TextColor3 = THEME.SubText
-BlatantTimerLabel.Size = UDim2.new(1, -30, 0, 18)
-BlatantTimerLabel.Position = UDim2.new(0, 15, 0, 114)
-BlatantTimerLabel.BackgroundTransparency = 1
-BlatantTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- [NEW] AUTO BLATANT TIME SLIDER
+local AutoBlatantLabel = Instance.new("TextLabel", SlidersFrame)
+AutoBlatantLabel.Text = "Auto Blatant Time: " .. autoBlatantThreshold .. "s"
+AutoBlatantLabel.Font = Enum.Font.GothamMedium
+AutoBlatantLabel.TextSize = 11
+AutoBlatantLabel.TextColor3 = Color3.fromRGB(255, 200, 80)
+AutoBlatantLabel.Size = UDim2.new(1, -30, 0, 18)
+AutoBlatantLabel.Position = UDim2.new(0, 15, 0, 103)
+AutoBlatantLabel.BackgroundTransparency = 1
+AutoBlatantLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-local BlatantTimerBg = Instance.new("Frame", SlidersFrame)
-BlatantTimerBg.Size = UDim2.new(1, -30, 0, 6)
-BlatantTimerBg.Position = UDim2.new(0, 15, 0, 134)
-BlatantTimerBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", BlatantTimerBg).CornerRadius = UDim.new(1, 0)
-local BlatantTimerFill = Instance.new("Frame", BlatantTimerBg)
-BlatantTimerFill.Size = UDim2.new((autoBlatantTimer-1)/13, 0, 1, 0)
-BlatantTimerFill.BackgroundColor3 = Color3.fromRGB(255, 150, 50)
-Instance.new("UICorner", BlatantTimerFill).CornerRadius = UDim.new(1, 0)
-local BlatantTimerBtn = Instance.new("TextButton", BlatantTimerBg)
-BlatantTimerBtn.Size = UDim2.new(1,0,1,0)
-BlatantTimerBtn.BackgroundTransparency = 1
-BlatantTimerBtn.Text = ""
+local AutoBlatantBg = Instance.new("Frame", SlidersFrame)
+AutoBlatantBg.Size = UDim2.new(1, -30, 0, 6)
+AutoBlatantBg.Position = UDim2.new(0, 15, 0, 121)
+AutoBlatantBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", AutoBlatantBg).CornerRadius = UDim.new(1, 0)
 
-SetupSlider(BlatantTimerBtn, BlatantTimerBg, BlatantTimerFill, function(pct)
-    autoBlatantTimer = 1 + math.floor(pct * 13) -- Range 1-14
-    Config.AutoBlatantTimer = autoBlatantTimer
-    BlatantTimerFill.Size = UDim2.new(pct, 0, 1, 0)
-    BlatantTimerLabel.Text = "Blatant Timer: " .. autoBlatantTimer .. "s"
+local AutoBlatantFill = Instance.new("Frame", AutoBlatantBg)
+AutoBlatantFill.Size = UDim2.new((autoBlatantThreshold-1)/13, 0, 1, 0)
+AutoBlatantFill.BackgroundColor3 = Color3.fromRGB(255, 200, 80)
+Instance.new("UICorner", AutoBlatantFill).CornerRadius = UDim.new(1, 0)
+
+local AutoBlatantBtn = Instance.new("TextButton", AutoBlatantBg)
+AutoBlatantBtn.Size = UDim2.new(1,0,1,0)
+AutoBlatantBtn.BackgroundTransparency = 1
+AutoBlatantBtn.Text = ""
+
+SetupSlider(AutoBlatantBtn, AutoBlatantBg, AutoBlatantFill, function(pct)
+    autoBlatantThreshold = 1 + math.floor(pct * 13) -- Range 1-14
+    Config.AutoBlatantTime = autoBlatantThreshold
+    AutoBlatantFill.Size = UDim2.new(pct, 0, 1, 0)
+    AutoBlatantLabel.Text = "Auto Blatant Time: " .. autoBlatantThreshold .. "s"
 end)
+
 
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
@@ -980,6 +1038,7 @@ local function CreateToggle(text, pos, callback)
     btn.Size = UDim2.new(0, 85, 0, 24)
     btn.Position = pos
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    
     btn.MouseButton1Click:Connect(function()
         local newState, newText, newColor = callback()
         btn.Text = newText
@@ -1016,6 +1075,7 @@ local SortBtn = CreateToggle("Sort: "..sortMode, UDim2.new(0, 15, 0, 33), functi
     elseif sortMode == "Shortest" then sortMode = "Longest"
     elseif sortMode == "Longest" then sortMode = "Killer"
     else sortMode = "Random" end
+    
     Config.SortMode = sortMode
     lastDetected = "---"
     return true, "Sort: "..sortMode, THEME.Accent
@@ -1088,6 +1148,7 @@ local function CreateCheckbox(text, pos, key)
         lbl.TextColor3 = THEME.Text
         box.BackgroundColor3 = THEME.Accent
     end
+    
     return container
 end
 
@@ -1102,8 +1163,8 @@ local function GetBlatantText()
 end
 
 local function GetBlatantColor()
-    if Config.Blatant == "Auto" then return Color3.fromRGB(255, 200, 80)
-    elseif Config.Blatant then return Color3.fromRGB(255, 80, 80)
+    if Config.Blatant == "Auto" then return Color3.fromRGB(255, 200, 80) -- Orange for Auto
+    elseif Config.Blatant then return Color3.fromRGB(255, 80, 80) -- Red for On
     else return THEME.SubText end
 end
 
@@ -1118,12 +1179,20 @@ BlatantBtn.Position = UDim2.new(0, 15, 0, 115)
 Instance.new("UICorner", BlatantBtn).CornerRadius = UDim.new(0, 4)
 
 BlatantBtn.MouseButton1Click:Connect(function()
-    if Config.Blatant == false then Config.Blatant = true
-    elseif Config.Blatant == true then Config.Blatant = "Auto"
-    else Config.Blatant = false end
+    if Config.Blatant == false then
+        Config.Blatant = true
+    elseif Config.Blatant == true then
+        Config.Blatant = "Auto"
+    else
+        Config.Blatant = false
+    end
+    
     BlatantBtn.Text = GetBlatantText()
     BlatantBtn.TextColor3 = GetBlatantColor()
-    if Config.Blatant ~= "Auto" then isBlatant = Config.Blatant end
+    
+    if Config.Blatant ~= "Auto" then
+        isBlatant = Config.Blatant
+    end
     SaveConfig()
 end)
 
@@ -1145,9 +1214,6 @@ ManageWordsBtn.Size = UDim2.new(0, 130, 0, 24)
 ManageWordsBtn.Position = UDim2.new(0, 15, 0, 145)
 Instance.new("UICorner", ManageWordsBtn).CornerRadius = UDim.new(0, 4)
 
--- [REMOVED] Word Browser Button & Functionality
--- Adjusted positions of other buttons below
-
 local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
 ServerBrowserBtn.Text = "Server Browser"
 ServerBrowserBtn.Font = Enum.Font.GothamMedium
@@ -1155,18 +1221,8 @@ ServerBrowserBtn.TextSize = 11
 ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
 ServerBrowserBtn.BackgroundColor3 = THEME.Background
 ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 175) -- Moved up
+ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 175)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
-
-local BlacklistManagerBtn = Instance.new("TextButton", TogglesFrame)
-BlacklistManagerBtn.Text = "Blacklist Manager"
-BlacklistManagerBtn.Font = Enum.Font.GothamMedium
-BlacklistManagerBtn.TextSize = 11
-BlacklistManagerBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-BlacklistManagerBtn.BackgroundColor3 = THEME.Background
-BlacklistManagerBtn.Size = UDim2.new(0, 265, 0, 24)
-BlacklistManagerBtn.Position = UDim2.new(0, 15, 0, 205) -- Moved up
-Instance.new("UICorner", BlacklistManagerBtn).CornerRadius = UDim.new(0, 4)
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
@@ -1209,8 +1265,20 @@ end)
 local function SetupPhantomBox(box, placeholder)
     box.Text = placeholder
     box.TextColor3 = THEME.SubText
-    box.Focused:Connect(function() if box.Text == placeholder then box.Text = "" box.TextColor3 = THEME.Text end end)
-    box.FocusLost:Connect(function() if box.Text == "" then box.Text = placeholder box.TextColor3 = THEME.SubText end end)
+    
+    box.Focused:Connect(function()
+        if box.Text == placeholder then
+            box.Text = ""
+            box.TextColor3 = THEME.Text
+        end
+    end)
+    
+    box.FocusLost:Connect(function()
+        if box.Text == "" then
+            box.Text = placeholder
+            box.TextColor3 = THEME.SubText
+        end
+    end)
 end
 
 local CWSearchBox = Instance.new("TextBox", CustomWordsFrame)
@@ -1254,11 +1322,16 @@ CWAddBtn.Position = UDim2.new(1, -60, 1, -35)
 Instance.new("UICorner", CWAddBtn).CornerRadius = UDim.new(0, 4)
 
 local function RefreshCustomWords()
-    for _, c in ipairs(CWScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+    for _, c in ipairs(CWScroll:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
     local queryRaw = CWSearchBox.Text
     local query = (queryRaw == "Search words...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
+    
     local list = Config.CustomWords or {}
     local shownCount = 0
+    
     for i, w in ipairs(list) do
         if query == "" or w:find(query, 1, true) then
             shownCount = shownCount + 1
@@ -1269,6 +1342,14 @@ local function RefreshCustomWords()
             row.Text = ""
             row.AutoButtonColor = false
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            
+            row.MouseButton1Click:Connect(function()
+                Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
+                task.delay(0.2, function()
+                     Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+                end)
+            end)
+            
             local lbl = Instance.new("TextLabel", row)
             lbl.Text = w
             lbl.Font = Enum.Font.Gotham
@@ -1278,6 +1359,7 @@ local function RefreshCustomWords()
             lbl.Position = UDim2.new(0, 5, 0, 0)
             lbl.BackgroundTransparency = 1
             lbl.TextXAlignment = Enum.TextXAlignment.Left
+            
             local del = Instance.new("TextButton", row)
             del.Text = "X"
             del.Font = Enum.Font.GothamBold
@@ -1286,10 +1368,10 @@ local function RefreshCustomWords()
             del.Size = UDim2.new(0, 22, 1, 0)
             del.Position = UDim2.new(1, -22, 0, 0)
             del.BackgroundTransparency = 1
+            
             del.MouseButton1Click:Connect(function()
                 table.remove(Config.CustomWords, i)
                 SaveConfig()
-                Blacklist[w] = true
                 RefreshCustomWords()
                 ShowToast("Removed: " .. w, "warning")
             end)
@@ -1303,22 +1385,40 @@ CWSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshCustomWords)
 CWAddBtn.MouseButton1Click:Connect(function()
     local text = CWAddBox.Text
     if text == "Add new word..." then return end
+    
     text = text:gsub("[%s%c]+", ""):lower()
     if #text < 2 then return end
+    
     if not Config.CustomWords then Config.CustomWords = {} end
+    
     for _, w in ipairs(Config.CustomWords) do
-        if w == text then ShowToast("Word already in custom list!", "warning") return end
+        if w == text then
+            ShowToast("Word already in custom list!", "warning")
+            return
+        end
     end
+    
     local existsInMain = false
     local c = text:sub(1,1)
-    if Buckets and Buckets[c] then for _, w in ipairs(Buckets[c]) do if w == text then existsInMain = true break end end end
-    if existsInMain then ShowToast("Word already in main dictionary!", "error") return end
+    if Buckets and Buckets[c] then
+        for _, w in ipairs(Buckets[c]) do
+            if w == text then existsInMain = true break end
+        end
+    end
+    
+    if existsInMain then
+         ShowToast("Word already in main dictionary!", "error")
+         return
+    end
+
     table.insert(Config.CustomWords, text)
     SaveConfig()
+    
     table.insert(Words, text)
     if c == "" then c = "#" end
     Buckets[c] = Buckets[c] or {}
     table.insert(Buckets[c], text)
+    
     CWAddBox.Text = ""
     CWAddBox:ReleaseFocus()
     RefreshCustomWords()
@@ -1326,112 +1426,6 @@ CWAddBtn.MouseButton1Click:Connect(function()
 end)
 
 RefreshCustomWords()
-
-local BlacklistFrame = Instance.new("Frame", ScreenGui)
-BlacklistFrame.Name = "BlacklistFrame"
-BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
-BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175)
-BlacklistFrame.BackgroundColor3 = THEME.Background
-BlacklistFrame.Visible = false
-BlacklistFrame.ClipsDescendants = true
-EnableDragging(BlacklistFrame)
-Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
-local BLStroke = Instance.new("UIStroke", BlacklistFrame)
-BLStroke.Color = Color3.fromRGB(255, 80, 80)
-BLStroke.Transparency = 0.5
-BLStroke.Thickness = 2
-
-local BLHeader = Instance.new("TextLabel", BlacklistFrame)
-BLHeader.Text = "Blacklist Manager"
-BLHeader.Font = Enum.Font.GothamBold
-BLHeader.TextSize = 14
-BLHeader.TextColor3 = THEME.Text
-BLHeader.Size = UDim2.new(1, 0, 0, 35)
-BLHeader.BackgroundTransparency = 1
-
-local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
-BLCloseBtn.Text = "X"
-BLCloseBtn.Font = Enum.Font.GothamBold
-BLCloseBtn.TextSize = 14
-BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
-BLCloseBtn.BackgroundTransparency = 1
-BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
-
-local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
-BLSearchBox.Font = Enum.Font.Gotham
-BLSearchBox.TextSize = 12
-BLSearchBox.BackgroundColor3 = THEME.ItemBG
-BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
-BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
-BLSearchBox.TextColor3 = THEME.Text
-Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
-SetupPhantomBox(BLSearchBox, "Search blacklist...")
-
-local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
-BLScroll.Size = UDim2.new(1, -10, 1, -70)
-BLScroll.Position = UDim2.new(0, 5, 0, 65)
-BLScroll.BackgroundTransparency = 1
-BLScroll.ScrollBarThickness = 2
-BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
-BLScroll.CanvasSize = UDim2.new(0,0,0,0)
-
-local BLListLayout = Instance.new("UIListLayout", BLScroll)
-BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-BLListLayout.Padding = UDim.new(0, 2)
-
-local function RefreshBlacklist()
-    for _, c in ipairs(BLScroll:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
-    local queryRaw = BLSearchBox.Text
-    local query = (queryRaw == "Search blacklist...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
-    local sortedList = {}
-    for k, v in pairs(Blacklist) do table.insert(sortedList, k) end
-    table.sort(sortedList)
-    local shownCount = 0
-    for _, w in ipairs(sortedList) do
-        if query == "" or w:find(query, 1, true) then
-            shownCount = shownCount + 1
-            local row = Instance.new("Frame", BLScroll)
-            row.Size = UDim2.new(1, -6, 0, 22)
-            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
-            row.BorderSizePixel = 0
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-            local lbl = Instance.new("TextLabel", row)
-            lbl.Text = w
-            lbl.Font = Enum.Font.Gotham
-            lbl.TextSize = 12
-            lbl.TextColor3 = THEME.Text
-            lbl.Size = UDim2.new(1, -30, 1, 0)
-            lbl.Position = UDim2.new(0, 5, 0, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            local del = Instance.new("TextButton", row)
-            del.Text = "X"
-            del.Font = Enum.Font.GothamBold
-            del.TextSize = 11
-            del.TextColor3 = Color3.fromRGB(255, 80, 80)
-            del.Size = UDim2.new(0, 22, 1, 0)
-            del.Position = UDim2.new(1, -22, 0, 0)
-            del.BackgroundTransparency = 1
-            del.MouseButton1Click:Connect(function()
-                Blacklist[w] = nil
-                SaveBlacklist()
-                RefreshBlacklist()
-                ShowToast("Removed from blacklist: " .. w, "success")
-            end)
-        end
-    end
-    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
-end
-
-BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklist)
-BlacklistManagerBtn.MouseButton1Click:Connect(function()
-    BlacklistFrame.Visible = not BlacklistFrame.Visible
-    BlacklistFrame.Parent = nil
-    BlacklistFrame.Parent = ScreenGui
-    if BlacklistFrame.Visible then RefreshBlacklist() end
-end)
 
 local ServerFrame = Instance.new("Frame", ScreenGui)
 ServerFrame.Name = "ServerBrowser"
@@ -1471,10 +1465,13 @@ SBList.Position = UDim2.new(0, 10, 0, 50)
 SBList.BackgroundTransparency = 1
 SBList.ScrollBarThickness = 3
 SBList.ScrollBarImageColor3 = THEME.Accent
+
 local SBLayout = Instance.new("UIListLayout", SBList)
 SBLayout.Padding = UDim.new(0, 5)
 SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
 local ServerSortMode = "Smallest"
+
 local SBSortBtn = Instance.new("TextButton", ServerFrame)
 SBSortBtn.Text = "Sort: Smallest"
 SBSortBtn.Font = Enum.Font.GothamBold
@@ -1484,6 +1481,7 @@ SBSortBtn.TextColor3 = THEME.SubText
 SBSortBtn.Size = UDim2.new(0.5, -15, 0, 30)
 SBSortBtn.Position = UDim2.new(0, 10, 1, -40)
 Instance.new("UICorner", SBSortBtn).CornerRadius = UDim.new(0, 6)
+
 local SBRefresh = Instance.new("TextButton", ServerFrame)
 SBRefresh.Text = "Refresh"
 SBRefresh.Font = Enum.Font.GothamBold
@@ -1495,7 +1493,11 @@ Instance.new("UICorner", SBRefresh).CornerRadius = UDim.new(0, 6)
 
 local function FetchServers()
     SBRefresh.Text = "..."
-    for _, c in ipairs(SBList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+    
+    for _, c in ipairs(SBList:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
     task.spawn(function()
         local success, result = pcall(function()
             return request({
@@ -1503,18 +1505,25 @@ local function FetchServers()
                 Method = "GET"
             })
         end)
+        
         if success and result and result.Body then
             local data = HttpService:JSONDecode(result.Body)
             if data and data.data then
                 local servers = data.data
-                if ServerSortMode == "Smallest" then table.sort(servers, function(a,b) return (a.playing or 0) < (b.playing or 0) end)
-                else table.sort(servers, function(a,b) return (a.playing or 0) > (b.playing or 0) end) end
+                
+                if ServerSortMode == "Smallest" then
+                    table.sort(servers, function(a,b) return (a.playing or 0) < (b.playing or 0) end)
+                else
+                    table.sort(servers, function(a,b) return (a.playing or 0) > (b.playing or 0) end)
+                end
+                
                 for _, srv in ipairs(servers) do
                     if srv.playing and srv.maxPlayers and srv.id ~= game.JobId then
                         local row = Instance.new("Frame", SBList)
                         row.Size = UDim2.new(1, -6, 0, 45)
                         row.BackgroundColor3 = THEME.ItemBG
                         Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+                        
                         local info = Instance.new("TextLabel", row)
                         info.Text = "Players: " .. srv.playing .. " / " .. srv.maxPlayers .. "\nPing: " .. (srv.ping or "?") .. "ms"
                         info.Size = UDim2.new(0.6, 0, 1, 0)
@@ -1524,6 +1533,7 @@ local function FetchServers()
                         info.Font = Enum.Font.Gotham
                         info.TextSize = 12
                         info.TextXAlignment = Enum.TextXAlignment.Left
+                        
                         local join = Instance.new("TextButton", row)
                         join.Text = "Join"
                         join.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
@@ -1533,36 +1543,59 @@ local function FetchServers()
                         join.TextSize = 12
                         join.TextColor3 = Color3.fromRGB(255,255,255)
                         Instance.new("UICorner", join).CornerRadius = UDim.new(0, 4)
+                        
                         join.MouseButton1Click:Connect(function()
                             join.Text = "Joining..."
                             ShowToast("Teleporting...", "success")
-                            if queue_on_teleport then queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/yay.lua"))()') end
+                            
+                            if queue_on_teleport then
+                                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/yay.lua"))()')
+                            end
+
                             task.spawn(function()
-                                local success, err = pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, srv.id, Players.LocalPlayer) end)
-                                if not success then join.Text = "Failed" ShowToast("Teleport Failed: " .. tostring(err), "error") task.wait(2) join.Text = "Join" end
+                                local success, err = pcall(function()
+                                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, srv.id, Players.LocalPlayer)
+                                end)
+                                if not success then
+                                    join.Text = "Failed"
+                                    ShowToast("Teleport Failed: " .. tostring(err), "error")
+                                    task.wait(2)
+                                    join.Text = "Join"
+                                end
                             end)
                         end)
                     end
                 end
+                
                 SBList.CanvasSize = UDim2.new(0,0,0, SBLayout.AbsoluteContentSize.Y)
             end
-        else ShowToast("Failed to fetch servers", "error") end
+        else
+            ShowToast("Failed to fetch servers", "error")
+        end
         SBRefresh.Text = "Refresh"
     end)
 end
 
 SBSortBtn.MouseButton1Click:Connect(function()
-    if ServerSortMode == "Smallest" then ServerSortMode = "Largest" else ServerSortMode = "Smallest" end
+    if ServerSortMode == "Smallest" then
+        ServerSortMode = "Largest"
+    else
+        ServerSortMode = "Smallest"
+    end
     SBSortBtn.Text = "Sort: " .. ServerSortMode
     FetchServers()
 end)
 
 SBRefresh.MouseButton1Click:Connect(FetchServers)
+
 ServerBrowserBtn.MouseButton1Click:Connect(function()
     ServerFrame.Visible = not ServerFrame.Visible
     ServerFrame.Parent = nil
     ServerFrame.Parent = ScreenGui
-    if ServerFrame.Visible then FetchServers() end
+    
+    if ServerFrame.Visible then
+        FetchServers()
+    end
 end)
 
 local function CalculateDelay()
@@ -1577,39 +1610,52 @@ do
     local row1 = "qwertyuiop"
     local row2 = "asdfghjkl"
     local row3 = "zxcvbnm"
-    for i = 1, #row1 do KEY_POS[row1:sub(i,i)] = {x = i, y = 1} end
-    for i = 1, #row2 do KEY_POS[row2:sub(i,i)] = {x = i + 0.5, y = 2} end
-    for i = 1, #row3 do KEY_POS[row3:sub(i,i)] = {x = i + 1, y = 3} end
+    for i = 1, #row1 do
+        KEY_POS[row1:sub(i,i)] = {x = i, y = 1}
+    end
+    for i = 1, #row2 do
+        KEY_POS[row2:sub(i,i)] = {x = i + 0.5, y = 2}
+    end
+    for i = 1, #row3 do
+        KEY_POS[row3:sub(i,i)] = {x = i + 1, y = 3}
+    end
 end
 
 local function KeyDistance(a, b)
     if not a or not b then return 1 end
-    a = a:lower() b = b:lower()
-    local pa = KEY_POS[a] local pb = KEY_POS[b]
+    a = a:lower()
+    b = b:lower()
+    local pa = KEY_POS[a]
+    local pb = KEY_POS[b]
     if not pa or not pb then return 1 end
-    return math.sqrt((pa.x - pb.x)^2 + (pa.y - pb.y)^2)
+    local dx = pa.x - pb.x
+    local dy = pa.y - pb.y
+    return math.sqrt(dx*dx + dy*dy)
 end
 
 local lastKey = nil
 local function CalculateDelayForKeys(prevChar, nextChar)
-    -- [NEW] Force high speed if Panic Speed is active
-    if forcePanicSpeed then
-        return 60 / 1100
+    if isBlatant then 
+        return 60 / currentCPM 
     end
-    
-    if isBlatant then return 60 / currentCPM end
 
     local charsPerMin = currentCPM
     local baseDelay = 60 / charsPerMin
+    
     local variance = baseDelay * 0.35
     local extra = 0
     
     if useHumanization and useFingerModel and prevChar and nextChar and prevChar ~= "" then
         local dist = KeyDistance(prevChar, nextChar)
         extra = dist * 0.018 * (550 / math.max(150, currentCPM))
+        
         local pa = KEY_POS[prevChar:lower()]
         local pb = KEY_POS[nextChar:lower()]
-        if pa and pb then if (pa.x <= 5 and pb.x <= 5) or (pa.x > 5 and pb.x > 5) then extra = extra * 0.8 end end
+        if pa and pb then
+            if (pa.x <= 5 and pb.x <= 5) or (pa.x > 5 and pb.x > 5) then
+                extra = extra * 0.8
+            end
+        end
     end
 
     if useHumanization then
@@ -1626,6 +1672,7 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.Keyboard
 
 local function GetKeyCode(char)
     local layout = Config.KeyboardLayout or "QWERTY"
+    
     if type(char) == "string" and #char == 1 then
         char = char:lower()
         if layout == "QWERTZ" then
@@ -1646,11 +1693,15 @@ end
 local function SimulateKey(input)
     if typeof(input) == "string" and #input == 1 then
          local char = input
-         local vimSuccess = pcall(function() VirtualInputManager:SendTextInput(char) end)
+         local vimSuccess = pcall(function()
+             VirtualInputManager:SendTextInput(char)
+         end)
+         
          if not vimSuccess then
              local key
              pcall(function() key = GetKeyCode(input) end)
              if not key then pcall(function() key = Enum.KeyCode[input:upper()] end) end
+             
              if key then
                  pcall(function()
                      VirtualInputManager:SendKeyEvent(true, key, false, game)
@@ -1663,17 +1714,27 @@ local function SimulateKey(input)
     end
 
     local key
-    if typeof(input) == "EnumItem" then key = input else pcall(function() key = Enum.KeyCode[input:upper()] end) end
+    if typeof(input) == "EnumItem" then
+        key = input
+    else
+        pcall(function() key = Enum.KeyCode[input:upper()] end)
+    end
+
     if key then
         local baseHold = math.clamp(12 / currentCPM, 0.015, 0.05)
         local hold = isBlatant and 0.002 or (baseHold + (math.random() * 0.01) - 0.005)
-        if forcePanicSpeed then hold = 0.01 end
+
         local vimSuccess = pcall(function()
             VirtualInputManager:SendKeyEvent(true, key, false, game)
             task.wait(hold)
             VirtualInputManager:SendKeyEvent(false, key, false, game)
         end)
-        if not vimSuccess then pcall(function() VirtualUser:TypeKey(key) end) end
+
+        if not vimSuccess then
+            pcall(function()
+                VirtualUser:TypeKey(key)
+            end)
+        end
     end
 end
 
@@ -1685,6 +1746,7 @@ local function Backspace(count)
         lastKey = nil
         return
     end
+
     local key = Enum.KeyCode.Backspace
     for i = 1, count do
         pcall(function()
@@ -1707,21 +1769,30 @@ local function GetGameTextBox()
     local inGame = gui and gui:FindFirstChild("InGame")
     if inGame then
         local frame = inGame:FindFirstChild("Frame")
-        if frame then for _, c in ipairs(frame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end end
-        for _, c in ipairs(inGame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
+        if frame then
+             for _, c in ipairs(frame:GetDescendants()) do
+                 if c:IsA("TextBox") and c.Visible then return c end
+             end
+        end
+        for _, c in ipairs(inGame:GetDescendants()) do
+             if c:IsA("TextBox") and c.Visible then return c end
+        end
     end
     return UserInputService:GetFocusedTextBox()
 end
 
-local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, panicOverride)
+local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
     if unloaded then return end
+    
     if isTyping then
         if (tick() - lastTypingStart) > 15 then
             isTyping = false
             isAutoPlayScheduled = false
             StatusText.Text = "Typing State Reset (Timeout)"
             StatusText.TextColor3 = THEME.Warning
-        else return end
+        else
+            return
+        end
     end
 
     if UsedWords[targetWord] and not isCorrection then
@@ -1733,23 +1804,23 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
     isTyping = true
     lastTypingStart = tick()
     
-    -- [NEW] Handle Panic Override Logic inside the function
-    if panicOverride then
-        forcePanicSpeed = true
-        -- Hapus semua huruf (Logic backspace sesuai panjang kata yang terdeteksi)
-        if #currentDetected > 0 then
-            Backspace(#currentDetected)
-            task.wait(0.05)
-        end
-        -- Reset detected because we cleared it
-        currentDetected = "" 
-    else
-        forcePanicSpeed = false
+    local initialStrikes = GetStrikeCount()
+    
+    local targetBox = GetGameTextBox()
+    if targetBox then
+        targetBox:CaptureFocus()
+        task.wait(0.1)
     end
 
-    local initialStrikes = GetStrikeCount()
-    local targetBox = GetGameTextBox()
-    if targetBox then targetBox:CaptureFocus() task.wait(0.1) end
+    -- [PANIC] If panic is active, clear text first!
+    if isPanicActive then
+        local txt = targetBox and targetBox.Text or ""
+        if #txt > 0 then
+            Backspace(#txt + 2)
+            task.wait(0.1)
+        end
+        currentDetected = "" -- Conceptually reset
+    end
     
     StatusText.Text = "Typing..."
     StatusText.TextColor3 = THEME.Accent
@@ -1760,81 +1831,140 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             local commonLen = 0
             local minLen = math.min(#targetWord, #currentDetected)
             for i = 1, minLen do
-                if targetWord:sub(i,i) == currentDetected:sub(i,i) then commonLen = i else break end
+                if targetWord:sub(i,i) == currentDetected:sub(i,i) then
+                    commonLen = i
+                else
+                    break
+                end
             end
+
             local backspaceCount = #currentDetected - commonLen
-            if backspaceCount > 0 then Backspace(backspaceCount) task.wait(0.15) end
+            if backspaceCount > 0 then
+                Backspace(backspaceCount)
+                task.wait(0.15)
+            end
             
             local toType = targetWord:sub(commonLen + 1)
             for i = 1, #toType do
-                if not bypassTurn and not GetTurnInfo() then task.wait(0.05) if not GetTurnInfo() then break end end
+                if not bypassTurn and not GetTurnInfo() then
+                    task.wait(0.05)
+                    if not GetTurnInfo() then break end
+                end
                 local ch = toType:sub(i, i)
                 SimulateKey(ch)
                 task.wait(CalculateDelayForKeys(lastKey, ch))
                 lastKey = ch
-                if useHumanization and not panicOverride and math.random() < 0.03 then task.wait(0.15 + math.random() * 0.45) end
+                if useHumanization and math.random() < 0.03 then
+                    task.wait(0.15 + math.random() * 0.45)
+                end
             end
 
+            -- Pre-submission verify
             local finalCheck = GetGameTextBox()
-            if not riskyMistakes and not panicOverride then
+            if not riskyMistakes then
                 task.wait(0.1)
                 finalCheck = GetGameTextBox()
                 if finalCheck and finalCheck.Text ~= targetWord then
                      StatusText.Text = "Typing mismatch detected!"
                      StatusText.TextColor3 = THEME.Warning
                      Backspace(#finalCheck.Text)
-                     isTyping = false forceUpdateList = true
-                     forcePanicSpeed = false
+                     
+                     isTyping = false
+                     forceUpdateList = true
                      return
                 end
             end
+
             PressEnter()
+            
             local verifyStart = tick()
             local accepted = false
+            
             while (tick() - verifyStart) < 1.5 do
                 local currentCheck = GetCurrentGameWord()
-                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then accepted = true break end
+                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
+                     accepted = true
+                     break
+                end
                 task.wait(0.05)
             end
 
             if not accepted then
                 local finalStrikes = GetStrikeCount()
-                if finalStrikes > initialStrikes then Blacklist[targetWord] = true SaveBlacklist() ShowToast("Invalid Word (Blacklisted)", "error")
-                else UsedWords[targetWord] = true ShowToast("Already used!", "warning") end
+
+                if finalStrikes > initialStrikes then
+                    -- FAILED WORD (STRIKE)
+                    UsedWords[targetWord] = true
+                    ShowToast("Word Failed (Skipped)", "warning")
+                else
+                    -- DUPLICATE
+                    UsedWords[targetWord] = true
+                    ShowToast("Already used!", "warning")
+                end
+
                 RandomPriority[targetWord] = nil
-                for k, list in pairs(RandomOrderCache) do for i = #list, 1, -1 do if list[i] == targetWord then table.remove(list, i) end end end
+                
+                for k, list in pairs(RandomOrderCache) do
+                    for i = #list, 1, -1 do
+                        if list[i] == targetWord then table.remove(list, i) end
+                    end
+                end
+
                 StatusText.Text = "Rejected: '" .. targetWord .. "'"
                 StatusText.TextColor3 = THEME.Warning
+                
                 local focused = UserInputService:GetFocusedTextBox()
-                if focused and focused:IsDescendantOf(game) and focused.TextEditable then focused.Text = "" else Backspace(#targetWord + 5) end
+                if focused and focused:IsDescendantOf(game) and focused.TextEditable then
+                    focused.Text = ""
+                else
+                    Backspace(#targetWord + 5)
+                end
+
                 lastDetected = "---"
-                isTyping = false forceUpdateList = true
-                forcePanicSpeed = false
+                isTyping = false
+                forceUpdateList = true
                 return
             else
                 StatusText.Text = "Word Cleared (Corrected)"
                 StatusText.TextColor3 = THEME.SubText
+
                 local current = GetCurrentGameWord()
-                if #current > 0 then Backspace(#current) end
+                if #current > 0 then
+                    Backspace(#current)
+                end
+
                 UsedWords[targetWord] = true
                 isMyTurnLogDetected = false
                 task.wait(0.2)
             end
         else
             local missingPart = ""
-            if targetWord:sub(1, #currentDetected) == currentDetected then missingPart = targetWord:sub(#currentDetected + 1) else missingPart = targetWord end
+            if targetWord:sub(1, #currentDetected) == currentDetected then
+                missingPart = targetWord:sub(#currentDetected + 1)
+            else
+                missingPart = targetWord
+            end
+
             local letters = "abcdefghijklmnopqrstuvwxyz"
             for i = 1, #missingPart do
-                if not bypassTurn and not GetTurnInfo() then task.wait(0.05) if not GetTurnInfo() then break end end
+                if not bypassTurn and not GetTurnInfo() then
+                     task.wait(0.05)
+                     if not GetTurnInfo() then break end
+                end
                 local ch = missingPart:sub(i, i)
-                -- Force 0 error rate if panic override is on
-                local currentErrorRate = panicOverride and 0 or errorRate
-                
-                if currentErrorRate > 0 and (math.random() < (currentErrorRate / 100)) then
+                if errorRate > 0 and (math.random() < (errorRate / 100)) then
                     local typoChar
-                    repeat local idx = math.random(1, #letters) typoChar = letters:sub(idx, idx) until typoChar ~= ch
+                    repeat
+                        local idx = math.random(1, #letters)
+                        typoChar = letters:sub(idx, idx)
+                    until typoChar ~= ch
                     SimulateKey(typoChar)
-                    if riskyMistakes then task.wait(0.05 + math.random() * 0.1) PressEnter() end
+                    
+                    if riskyMistakes then
+                         task.wait(0.05 + math.random() * 0.1)
+                         PressEnter()
+                    end
+
                     task.wait(CalculateDelayForKeys(lastKey, typoChar))
                     lastKey = typoChar
                     local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
@@ -1850,31 +1980,42 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                     task.wait(CalculateDelayForKeys(lastKey, ch))
                     lastKey = ch
                 end
-                if useHumanization and not panicOverride and math.random() < 0.03 then task.wait(0.12 + math.random() * 0.5) end
+                if useHumanization and math.random() < 0.03 then
+                    task.wait(0.12 + math.random() * 0.5)
+                end
             end
 
-            if not riskyMistakes and not panicOverride then
+            -- Pre-submission verify
+            if not riskyMistakes then
                 task.wait(0.1)
                 local finalCheck = GetGameTextBox()
                 if finalCheck and finalCheck.Text ~= targetWord then
                     StatusText.Text = "Typing mismatch detected!"
                     StatusText.TextColor3 = THEME.Warning
                     Backspace(#finalCheck.Text)
-                    isTyping = false forceUpdateList = true
-                    forcePanicSpeed = false
+                    
+                    isTyping = false
+                    forceUpdateList = true
                     return
                 end
             end
+
             PressEnter()
+            
             local verifyStart = tick()
             local accepted = false
+            
             while (tick() - verifyStart) < 1.5 do
                 local currentCheck = GetCurrentGameWord()
-                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then accepted = true break end
+                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
+                     accepted = true
+                     break
+                end
                 task.wait(0.05)
             end
 
             if not accepted then
+                
                 local postCheck = GetGameTextBox()
                 if postCheck and postCheck.Text == targetWord then
                      StatusText.Text = "Enter failed? Retrying..."
@@ -1884,28 +2025,56 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                          StatusText.Text = "Submission Failed (Lag?)"
                          StatusText.TextColor3 = THEME.Warning
                          Backspace(#targetWord)
-                         isTyping = false forceUpdateList = true
-                         forcePanicSpeed = false
+                         isTyping = false
+                         forceUpdateList = true
                          return
                      end
                 end
+
                 local finalStrikes = GetStrikeCount()
-                if finalStrikes > initialStrikes then Blacklist[targetWord] = true SaveBlacklist() ShowToast("Invalid Word (Blacklisted)", "error")
-                else UsedWords[targetWord] = true ShowToast("Already used!", "warning") end
-                for k, list in pairs(RandomOrderCache) do for i = #list, 1, -1 do if list[i] == targetWord then table.remove(list, i) end end end
+
+                if finalStrikes > initialStrikes then
+                     UsedWords[targetWord] = true
+                     ShowToast("Word Failed (Skipped)", "warning")
+                else
+                     UsedWords[targetWord] = true
+                     ShowToast("Already used!", "warning")
+                end
+
+                for k, list in pairs(RandomOrderCache) do
+                    for i = #list, 1, -1 do
+                        if list[i] == targetWord then table.remove(list, i) end
+                    end
+                end
                 StatusText.Text = "Rejected: '" .. targetWord .. "'"
                 StatusText.TextColor3 = THEME.Warning
+                
                 local focused = UserInputService:GetFocusedTextBox()
-                if focused and focused:IsDescendantOf(game) and focused.TextEditable then focused.Text = "" else Backspace(#targetWord + 5) end
-                isTyping = false lastDetected = "---" forceUpdateList = true
-                forcePanicSpeed = false
-                task.spawn(function() task.wait(0.1) local _, req = GetTurnInfo() UpdateList(currentDetected, req) end)
+                if focused and focused:IsDescendantOf(game) and focused.TextEditable then
+                    focused.Text = ""
+                else
+                    Backspace(#targetWord + 5)
+                end
+                
+                isTyping = false
+                lastDetected = "---"
+                forceUpdateList = true
+
+                task.spawn(function()
+                    task.wait(0.1)
+                    local _, req = GetTurnInfo()
+                    UpdateList(currentDetected, req)
+                end)
                 return
             else
                 StatusText.Text = "Verification Failed"
                 StatusText.TextColor3 = THEME.Warning
+                
                 local current = GetCurrentGameWord()
-                if #current > 0 then Backspace(#current) end
+                if #current > 0 then
+                    Backspace(#current)
+                end
+
                 UsedWords[targetWord] = true
                 isMyTurnLogDetected = false
                 task.wait(0.2)
@@ -1913,7 +2082,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
         end
     end)
     isTyping = false
-    forcePanicSpeed = false
     forceUpdateList = true
 end
 
@@ -1922,19 +2090,36 @@ local function GetMatchLength(str, prefix)
     local max = math.min(#str, #prefix)
     for i = 1, max do
         local pb = string.byte(prefix, i)
-        if pb == 35 or pb == string.byte(str, i) then len = i else break end
+        if pb == 35 or pb == string.byte(str, i) then
+            len = i
+        else
+            break
+        end
     end
     return len
 end
 
 local function BinarySearchStart(list, prefix)
-    local left = 1 local right = #list local result = -1 local pLen = #prefix
+    local left = 1
+    local right = #list
+    local result = -1
+    local pLen = #prefix
+
     while left <= right do
         local mid = math.floor((left + right) / 2)
         local word = list[mid]
         local sub = word:sub(1, pLen)
-        if sub == prefix then result = mid right = mid - 1 elseif sub < prefix then left = mid + 1 else right = mid - 1 end
+
+        if sub == prefix then
+            result = mid
+            right = mid - 1
+        elseif sub < prefix then
+            left = mid + 1
+        else
+            right = mid - 1
+        end
     end
+
     return result
 end
 
@@ -1943,87 +2128,156 @@ UpdateList = function(detectedText, requiredLetter)
     local searchPrefix = detectedText
     local isBacktracked = false
     local manualSearch = false
+
     if SearchBox and SearchBox.Text ~= "" then
         searchPrefix = SearchBox.Text:lower():gsub("[%s%c]+", "")
         manualSearch = true
-        if requiredLetter and searchPrefix:sub(1,1) ~= requiredLetter:sub(1,1):lower() then requiredLetter = nil end
+        if requiredLetter and searchPrefix:sub(1,1) ~= requiredLetter:sub(1,1):lower() then
+             requiredLetter = nil
+        end
     end
+
     if not manualSearch and requiredLetter and #requiredLetter > 0 then
         local reqLen = GetMatchLength(requiredLetter, searchPrefix)
-        if reqLen == #searchPrefix and #requiredLetter > #searchPrefix then searchPrefix = requiredLetter end
+        if reqLen == #searchPrefix and #requiredLetter > #searchPrefix then
+             searchPrefix = requiredLetter
+        end
     end
+    
     local firstChar = searchPrefix:sub(1,1)
     if firstChar == "#" then firstChar = nil end
-    if (not firstChar or firstChar == "") and requiredLetter then firstChar = requiredLetter:sub(1,1):lower() end
-    local bucket = (firstChar and firstChar ~= "" and Buckets) and (Buckets[firstChar] or {}) or Words
+
+    if (not firstChar or firstChar == "") and requiredLetter then
+        firstChar = requiredLetter:sub(1,1):lower()
+    end
+    
+    local bucket
+    if firstChar and firstChar ~= "" and Buckets then
+        bucket = Buckets[firstChar] or {}
+    else
+        bucket = Words
+    end
     
     local function CollectMatches(prefix, tryFallbackLengths)
-        local exacts = {} local partials = {} local maxPartialLen = 0 local limit = 100
+        local exacts = {}
+        local fallbackExacts = {}
+        local partials = {}
+        local maxPartialLen = 0
+        local limit = 100
+        
         if bucket then
             local checkWord = function(w)
-                if Blacklist[w] or UsedWords[w] then return end
+                if UsedWords[w] then return end
+                
                 if suffixMode ~= "" and w:sub(-#suffixMode) ~= suffixMode then return end
+                
                 local isLengthMatch = true
-                if not tryFallbackLengths and lengthMode > 0 then isLengthMatch = (#w == lengthMode)
-                elseif tryFallbackLengths and lengthMode > 0 then isLengthMatch = true end
+                if not tryFallbackLengths and lengthMode > 0 then
+                    isLengthMatch = (#w == lengthMode)
+                elseif tryFallbackLengths and lengthMode > 0 then
+                     isLengthMatch = true
+                end
+                
                 if not isLengthMatch then return end
+
                 local mLen = GetMatchLength(w, prefix)
-                if mLen == #prefix then table.insert(exacts, w)
-                elseif #exacts == 0 then if mLen > maxPartialLen then maxPartialLen = mLen partials = {w} elseif mLen == maxPartialLen and mLen > 0 then if #partials < 50 then table.insert(partials, w) end end end
+                if mLen == #prefix then
+                    table.insert(exacts, w)
+                elseif #exacts == 0 then
+                    if mLen > maxPartialLen then
+                        maxPartialLen = mLen
+                        partials = {w}
+                    elseif mLen == maxPartialLen and mLen > 0 then
+                        if #partials < 50 then table.insert(partials, w) end
+                    end
+                end
             end
+
             local useBinary = true
             if prefix:find("#") or prefix:find("%*") then useBinary = false end
+            
             if useBinary and #prefix > 0 then
                 local startIndex = BinarySearchStart(bucket, prefix)
+                
                 if startIndex ~= -1 then
                     local count = 0
                     for i = startIndex, #bucket do
                         local w = bucket[i]
+                        
                         if w:sub(1, #prefix) ~= prefix then break end
+                        
                         checkWord(w)
-                        count = count + 1 if count >= 3000 then break end
+                        
+                        count = count + 1
+                        if count >= 3000 then break end
                     end
                 end
             else
                 local searchLimit = (sortMode == "Random") and 1000 or limit
-                for _, w in ipairs(bucket) do checkWord(w) if #exacts >= searchLimit then break end end
+                for _, w in ipairs(bucket) do
+                    checkWord(w)
+                    if #exacts >= searchLimit then break end
+                end
             end
-            if sortMode == "Random" and #exacts > 0 then shuffleTable(exacts) end
+            
+            if sortMode == "Random" and #exacts > 0 then
+                shuffleTable(exacts)
+            end
         end
-        return exacts, partials, pLen
+        return exacts, partials, maxPartialLen
     end
 
     local exacts, partials, pLen = CollectMatches(searchPrefix, false)
+
     if #exacts == 0 and lengthMode > 0 then
-        local fallbackExacts, _, _ = CollectMatches(searchPrefix, true)
-        if #fallbackExacts > 0 then exacts = fallbackExacts end
+        local fallbackExacts, fallbackPartials, fallbackPLen = CollectMatches(searchPrefix, true)
+        if #fallbackExacts > 0 then
+             exacts = fallbackExacts
+        end
     end
 
-    if #exacts > 0 then matches = exacts
-    elseif (pLen or 0) > 0 then matches = partials searchPrefix = searchPrefix:sub(1, pLen) isBacktracked = true
+    if #exacts > 0 then
+        matches = exacts
+    elseif pLen > 0 then
+        matches = partials
+        searchPrefix = searchPrefix:sub(1, pLen)
+        isBacktracked = true
     elseif requiredLetter and #requiredLetter > 0 then
         local reqChar = requiredLetter:sub(1,1):lower()
         if searchPrefix:sub(1,1):lower() ~= reqChar then
             local fallbackBucket = (Buckets and Buckets[reqChar]) or Words
             if fallbackBucket then
                 for _, w in ipairs(fallbackBucket) do
-                    if not Blacklist[w] and not UsedWords[w] then
+                    if not UsedWords[w] then
                          local mLen = GetMatchLength(w, requiredLetter)
-                         if mLen == #requiredLetter then table.insert(matches, w) if #matches >= 100 then break end end
+                         if mLen == #requiredLetter then
+                             table.insert(matches, w)
+                             if #matches >= 100 then break end
+                         end
                     end
                 end
             end
-            if #matches > 0 then searchPrefix = requiredLetter isBacktracked = true end
+            
+            if #matches > 0 then
+                searchPrefix = requiredLetter
+                isBacktracked = true
+            end
         end
     end
     
     if #matches > 0 then
-        if sortMode == "Longest" then table.sort(matches, function(a, b) return #a > #b end)
-        elseif sortMode == "Shortest" then table.sort(matches, function(a, b) return #a < #b end)
+        if sortMode == "Longest" then
+            table.sort(matches, function(a, b) return #a > #b end)
+        elseif sortMode == "Shortest" then
+            table.sort(matches, function(a, b) return #a < #b end)
         elseif sortMode == "Killer" then
             table.sort(matches, function(a, b)
-                local sA = GetKillerScore(a) local sB = GetKillerScore(b)
-                if sA == sB then return #a < #b end return sA > sB
+                local sA = GetKillerScore(a)
+                local sB = GetKillerScore(b)
+                if sA == sB then
+                    return #a < #b
+                end
+                return sA > sB
             end)
         end
     end
@@ -2033,24 +2287,42 @@ UpdateList = function(detectedText, requiredLetter)
     for i = 1, math.min(maxDisplay, #matches) do table.insert(displayList, matches[i]) end
     
     if showKeyboard and KeyboardFrame.Visible then
-        local colors = {Color3.fromRGB(100, 255, 140), Color3.fromRGB(255, 180, 200), Color3.fromRGB(100, 200, 255)}
+        local colors = {
+            Color3.fromRGB(100, 255, 140),
+            Color3.fromRGB(255, 180, 200),
+            Color3.fromRGB(100, 200, 255)
+        }
+        
         local targetKeys = {}
+
         for i = 1, math.min(3, #displayList) do
             local w = displayList[i]
             local nextChar = w:sub(#searchPrefix + 1, #searchPrefix + 1)
             if nextChar and nextChar ~= "" then
                 local char = nextChar:lower()
-                if not targetKeys[char] then targetKeys[char] = i end
+                if not targetKeys[char] then
+                    targetKeys[char] = i
+                end
             end
         end
+
         for char, k in pairs(Keys) do
             local priority = targetKeys[char]
-            if priority then k.BackgroundColor3 = Color3.fromRGB(255, 255, 255) Tween(k, {BackgroundColor3 = colors[priority]}, 0.3)
-            else Tween(k, {BackgroundColor3 = THEME.ItemBG}, 0.2) end
+            if priority then
+                k.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                Tween(k, {BackgroundColor3 = colors[priority]}, 0.3)
+            else
+                Tween(k, {BackgroundColor3 = THEME.ItemBG}, 0.2)
+            end
         end
     end
 
-    if #matches > 0 and not isBacktracked then currentBestMatch = matches[1] else currentBestMatch = nil end
+    if #matches > 0 and not isBacktracked then
+        currentBestMatch = matches[1]
+    else
+        currentBestMatch = nil
+    end
+    
     if isBacktracked then
         local validPart = searchPrefix
         local invalidPart = detectedText:sub(#searchPrefix + 1)
@@ -2065,6 +2337,7 @@ UpdateList = function(detectedText, requiredLetter)
     for i = 1, math.max(#displayList, #ButtonCache) do
         local w = displayList[i]
         local btn = ButtonCache[i]
+
         if w then
             local lbl
             if not btn then
@@ -2074,6 +2347,7 @@ UpdateList = function(detectedText, requiredLetter)
                 btn.Text = ""
                 btn.AutoButtonColor = false
                 Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+                
                 lbl = Instance.new("TextLabel", btn)
                 lbl.Name = "Label"
                 lbl.Size = UDim2.new(1, -20, 1, 0)
@@ -2083,12 +2357,20 @@ UpdateList = function(detectedText, requiredLetter)
                 lbl.TextSize = 14
                 lbl.TextXAlignment = Enum.TextXAlignment.Left
                 lbl.RichText = true
+                
                 btn.MouseEnter:Connect(function() Tween(btn, {BackgroundColor3 = Color3.fromRGB(45,45,55)}) end)
                 btn.MouseLeave:Connect(function() Tween(btn, {BackgroundColor3 = THEME.ItemBG}) end)
+                
                 btn.MouseButton1Click:Connect(function()
                     local d = ButtonData[btn]
-                    if d then SmartType(d.word, d.detected, true) local l = btn:FindFirstChild("Label") if l then l.TextColor3 = THEME.Success end Tween(btn, {BackgroundColor3 = Color3.fromRGB(30,60,40)}) end
+                    if d then
+                        SmartType(d.word, d.detected, true)
+                        local l = btn:FindFirstChild("Label")
+                        if l then l.TextColor3 = THEME.Success end
+                        Tween(btn, {BackgroundColor3 = Color3.fromRGB(30,60,40)})
+                    end
                 end)
+                
                 btn.Parent = ScrollList
                 table.insert(ButtonCache, btn)
             else
@@ -2098,25 +2380,40 @@ UpdateList = function(detectedText, requiredLetter)
                 btn.BackgroundColor3 = THEME.ItemBG
                 if lbl then lbl.TextColor3 = THEME.Text end
             end
+            
             ButtonData[btn] = {word = w, detected = detectedText}
+            
             local accentRGB = ColorToRGB(THEME.Accent)
-            if i == 1 then accentRGB = "100,255,140" elseif i == 2 then accentRGB = "255,180,200" elseif i == 3 then accentRGB = "100,200,255" end
+            
+            if i == 1 then accentRGB = "100,255,140"
+            elseif i == 2 then accentRGB = "255,180,200"
+            elseif i == 3 then accentRGB = "100,200,255"
+            end
+
             local textRGB = ColorToRGB(THEME.Text)
+            
             local displayText = ""
             if isBacktracked then
                 local prefix = w:sub(1, #searchPrefix)
                 local suffix = w:sub(#searchPrefix + 1)
-                displayText = "<font color=\"rgb(" .. accentRGB .. ")\">" .. prefix .. "</font>" .. "<font color=\"rgb(" .. textRGB .. ")\">" .. suffix .. "</font>"
+                displayText = "<font color=\"rgb(" .. accentRGB .. ")\">" .. prefix .. "</font>"
+                    .. "<font color=\"rgb(" .. textRGB .. ")\">" .. suffix .. "</font>"
             else
                 local prefix = w:sub(1, #detectedText)
                 local suffix = w:sub(#detectedText + 1)
-                displayText = "<font color=\"rgb(" .. accentRGB .. ")\">" .. prefix .. "</font>" .. "<font color=\"rgb(" .. textRGB .. ")\">" .. suffix .. "</font>"
+                displayText = "<font color=\"rgb(" .. accentRGB .. ")\">" .. prefix .. "</font>"
+                    .. "<font color=\"rgb(" .. textRGB .. ")\">" .. suffix .. "</font>"
             end
+            
             if lbl then lbl.Text = displayText end
         else
-            if btn then btn.Visible = false ButtonData[btn] = nil end
+            if btn then
+                btn.Visible = false
+                ButtonData[btn] = nil
+            end
         end
     end
+    
     ScrollList.CanvasSize = UDim2.new(0,0,0, UIListLayout.AbsoluteContentSize.Y)
 end
 
@@ -2151,6 +2448,7 @@ local lastTypeVisible = false
 local lastRequiredLetter = ""
 
 local StatsData = {}
+
 do
     local sf = Instance.new("Frame")
     sf.Name = "StatsFrame"
@@ -2163,6 +2461,7 @@ do
     Instance.new("UICorner", sf).CornerRadius = UDim.new(0, 8)
     Instance.new("UIStroke", sf).Color = THEME.Accent
     StatsData.Frame = sf
+
     local st = Instance.new("TextLabel")
     st.Size = UDim2.new(1, 0, 0, 25)
     st.Position = UDim2.new(0, 0, 0, 5)
@@ -2173,6 +2472,7 @@ do
     st.Text = "--"
     st.Parent = sf
     StatsData.Timer = st
+
     local sc = Instance.new("TextLabel")
     sc.Size = UDim2.new(1, 0, 0, 20)
     sc.Position = UDim2.new(0, 0, 0, 30)
@@ -2201,11 +2501,16 @@ runConn = RunService.RenderStepped:Connect(function()
         
         local isVisible = false
         if frame and frame.Parent then
-            if frame.Parent:IsA("ScreenGui") then isVisible = frame.Parent.Enabled
-            elseif frame.Parent:IsA("GuiObject") then isVisible = frame.Parent.Visible end
+            if frame.Parent:IsA("ScreenGui") then
+                isVisible = frame.Parent.Enabled
+            elseif frame.Parent:IsA("GuiObject") then
+                isVisible = frame.Parent.Visible
+            end
         end
 
         local seconds = nil
+        local isMyTurn, requiredLetter = GetTurnInfo(frame)
+
         if isVisible then
             local circle = frame:FindFirstChild("Circle")
             local timerLbl = circle and circle:FindFirstChild("Timer") and circle.Timer:FindFirstChild("Seconds")
@@ -2219,9 +2524,9 @@ runConn = RunService.RenderStepped:Connect(function()
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
                 
-                -- [MODIFIED] Auto Blatant now uses autoBlatantTimer Slider
+                -- [LOGIKA AUTO BLATANT BARU]
                 if Config.Blatant == "Auto" then
-                    if seconds and seconds < autoBlatantTimer then
+                    if isMyTurn and seconds and seconds < autoBlatantThreshold then
                         isBlatant = true
                         StatusText.Text = "Auto Blatant Active!"
                         StatusText.TextColor3 = Color3.fromRGB(255, 100, 50)
@@ -2231,21 +2536,26 @@ runConn = RunService.RenderStepped:Connect(function()
                 else
                     isBlatant = Config.Blatant
                 end
+
+                -- [LOGIKA PANIC MODE BARU]
+                if isMyTurn and Config.Humanize and seconds and seconds < panicTimeThreshold then
+                    -- OVERRIDE VARIABLES UNTUK SMARTTYPE
+                    isPanicActive = true
+                    currentCPM = 1100
+                    errorRate = 0
+                else
+                    isPanicActive = false
+                    if not isBlatant then
+                        currentCPM = Config.CPM
+                        errorRate = Config.ErrorRate
+                    end
+                end
             end
         else
             StatsData.Frame.Visible = false
-            -- [NEW] Force Reset Timer Visual
+            -- [TIMER FIX] Reset timer ke 00s jika tidak terlihat
             StatsData.Timer.Text = "00s"
         end
-
-        -- [NEW] Logic to clear UsedWords cache when round ends (Visible -> Not Visible)
-        if not isVisible and lastTypeVisible then
-            UsedWords = {}
-            StatusText.Text = "Round Ended - Words Cleared"
-            StatusText.TextColor3 = THEME.Success
-        end
-
-        local isMyTurn, requiredLetter = GetTurnInfo(frame)
         
         if (now - lastWordCheck) > 0.05 then
             cachedDetected, cachedCensored = GetCurrentGameWord(frame)
@@ -2254,29 +2564,31 @@ runConn = RunService.RenderStepped:Connect(function()
         local detected, censored = cachedDetected, cachedCensored
         
         if detected ~= "" and not censored and not isMyTurn then
-             if not UsedWords[detected] then UsedWords[detected] = true end
+             if not UsedWords[detected] then
+                 UsedWords[detected] = true
+             end
         end
 
-        -- [MODIFIED] Panic Mode Logic using new slider interval and behavior
-        if isVisible and isMyTurn and not isTyping and seconds and seconds < panicInterval then
-            if Config.Humanize then
-                local char = (requiredLetter or ""):lower()
-                local bucket = Buckets[char]
-                if bucket then
-                    local bestWord = nil
-                    local bestLen = 999
-                    for _, w in ipairs(bucket) do
-                        if not Blacklist[w] and not UsedWords[w] and w:sub(1, #detected) == detected then
-                            if #w < bestLen then bestWord = w bestLen = #w end
+        -- [UPDATED AUTO PANIC SAVE]
+        if isVisible and isMyTurn and not isTyping and seconds and seconds < panicTimeThreshold then
+            local char = (requiredLetter or ""):lower()
+            local bucket = Buckets[char]
+            if bucket then
+                local bestWord = nil
+                local bestLen = 999
+                for _, w in ipairs(bucket) do
+                    if not UsedWords[w] and w:sub(1, #detected) == detected then
+                        if #w < bestLen then
+                            bestWord = w
+                            bestLen = #w
                         end
                     end
-                    
-                    if bestWord then
-                        StatusText.Text = "PANIC SAVE! (Deleting & Correcting)"
-                        StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-                        -- Trigger SmartType with panic override (last param = true)
-                        SmartType(bestWord, detected, false, false, true)
-                    end
+                end
+                
+                if bestWord then
+                    StatusText.Text = "PANIC SAVE!"
+                    StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
+                    SmartType(bestWord, detected, false)
                 end
             end
         end
@@ -2293,12 +2605,16 @@ runConn = RunService.RenderStepped:Connect(function()
                         if (matchFrame:IsA("Frame") or matchFrame:IsA("GuiObject")) and matchFrame.Name ~= "UIListLayout" then
                             local joinBtn = matchFrame:FindFirstChild("Join")
                             local title = matchFrame:FindFirstChild("Title")
+                            
                             local isLastLetter = false
                             local titleText = "N/A"
                             if title and title:IsA("TextLabel") then
                                 titleText = title.Text
-                                if titleText:find("Last Letter") then isLastLetter = true end
+                                if titleText:find("Last Letter") then
+                                    isLastLetter = true
+                                end
                             end
+
                             local idx = tonumber(matchFrame.Name)
                             local allowed = true
                             if idx then
@@ -2307,24 +2623,43 @@ runConn = RunService.RenderStepped:Connect(function()
                                 elseif idx == 9 then allowed = Config.AutoJoinSettings._8p
                                 end
                             end
+
                             if joinBtn and joinBtn.Visible and isLastLetter and allowed then
                                 local matchId = matchFrame.Name
                                 if (tick() - (JoinDebounce[matchId] or 0)) > 2 then
                                     JoinDebounce[matchId] = tick()
                                     task.wait(0.5)
+                                    
                                     local clicked = false
                                     if getconnections then
                                         if joinBtn:IsA("GuiButton") then
                                             local success, conns = pcall(function() return getconnections(joinBtn.MouseButton1Click) end)
-                                            if success and conns then for _, conn in ipairs(conns) do if conn.Fire then conn:Fire() end if conn.Function then task.spawn(conn.Function) end clicked = true end end
+                                            if success and conns then
+                                                for _, conn in ipairs(conns) do
+                                                    if conn.Fire then conn:Fire() end
+                                                    if conn.Function then
+                                                        task.spawn(conn.Function)
+                                                    end
+                                                    clicked = true
+                                                end
+                                            end
                                         end
                                     end
-                                    if not clicked then local cd = joinBtn:FindFirstChildWhichIsA("ClickDetector") if cd then fireclickdetector(cd) clicked = true end end
+                                    
+                                    if not clicked then
+                                        local cd = joinBtn:FindFirstChildWhichIsA("ClickDetector")
+                                        if cd then
+                                            fireclickdetector(cd)
+                                            clicked = true
+                                        end
+                                    end
+
                                     if not clicked then
                                         local absPos = joinBtn.AbsolutePosition
                                         local absSize = joinBtn.AbsoluteSize
                                         local centerX = absPos.X + absSize.X/2
                                         local centerY = absPos.Y + absSize.Y/2
+                                        
                                         VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
                                         task.wait(0.05)
                                         VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
@@ -2340,29 +2675,39 @@ runConn = RunService.RenderStepped:Connect(function()
 
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
-        -- Maintain existing cache clear on new round start just in case
+        
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
             StatusText.Text = "New Round - Words Reset"
             StatusText.TextColor3 = THEME.Success
         end
         lastTypeVisible = typeVisible
+
         if censored then
             if StatusText.Text ~= "Word is Censored" then
                 StatusText.Text = "Word is Censored"
                 StatusText.TextColor3 = THEME.Warning
                 Tween(StatusDot, {BackgroundColor3 = THEME.Warning})
+                
                 for _, btn in ipairs(ButtonCache) do btn.Visible = false end
                 StatsData.Count.Text = "Words: 0"
             end
-            listUpdatePending = false forceUpdateList = false currentBestMatch = nil lastDetected = detected lastRequiredLetter = requiredLetter
+            
+            listUpdatePending = false
+            forceUpdateList = false
+            currentBestMatch = nil
+            lastDetected = detected
+            lastRequiredLetter = requiredLetter
         end
         
         if listUpdatePending and (now - lastInputTime > LIST_DEBOUNCE) then
             listUpdatePending = false
             UpdateList(lastDetected, lastRequiredLetter)
+            
             local visCount = 0
-            for _, b in ipairs(ButtonCache) do if b.Visible then visCount = visCount + 1 end end
+            for _, b in ipairs(ButtonCache) do
+                if b.Visible then visCount = visCount + 1 end
+            end
             StatsData.Count.Text = "Words: " .. visCount .. "+"
         end
 
@@ -2376,15 +2721,22 @@ runConn = RunService.RenderStepped:Connect(function()
             end
             lastDetected = "---"
         elseif detected ~= lastDetected or requiredLetter ~= lastRequiredLetter or forceUpdateList then
-            currentBestMatch = nil lastDetected = detected lastRequiredLetter = requiredLetter
+            currentBestMatch = nil
+            lastDetected = detected
+            lastRequiredLetter = requiredLetter
+            
             if detected == "" and not forceUpdateList then
                 StatusText.Text = "Waiting..."
                 StatusText.TextColor3 = THEME.SubText
                 Tween(StatusDot, {BackgroundColor3 = THEME.SubText})
+                
                 UpdateList("", requiredLetter)
                 listUpdatePending = false
+                
                 local visCount = 0
-                for _, b in ipairs(ButtonCache) do if b.Visible then visCount = visCount + 1 end end
+                for _, b in ipairs(ButtonCache) do
+                    if b.Visible then visCount = visCount + 1 end
+                end
                 StatsData.Count.Text = "Words: " .. visCount .. "+"
             else
                 if detected ~= "" then
@@ -2392,13 +2744,34 @@ runConn = RunService.RenderStepped:Connect(function()
                     if #detected > 2 then
                         local c = detected:sub(1,1)
                         if c ~= "#" and Buckets and Buckets[c] then
-                            for _, w in ipairs(Buckets[c]) do if w == detected then isCompleted = true break end end
+                            for _, w in ipairs(Buckets[c]) do
+                                if w == detected then
+                                    isCompleted = true
+                                    break
+                                end
+                            end
                         end
                     end
-                    if isCompleted then StatusText.Text = "Completed: " .. detected .. " <font color=\"rgb(100,255,140)\">✓</font>" StatusText.TextColor3 = THEME.Success Tween(StatusDot, {BackgroundColor3 = THEME.Success})
-                    else StatusText.Text = "Input: " .. detected StatusText.TextColor3 = THEME.Accent Tween(StatusDot, {BackgroundColor3 = THEME.Warning}) end
+
+                    if isCompleted then
+                        StatusText.Text = "Completed: " .. detected .. " <font color=\"rgb(100,255,140)\">✓</font>"
+                        StatusText.TextColor3 = THEME.Success
+                        Tween(StatusDot, {BackgroundColor3 = THEME.Success})
+                    else
+                        StatusText.Text = "Input: " .. detected
+                        StatusText.TextColor3 = THEME.Accent
+                        Tween(StatusDot, {BackgroundColor3 = THEME.Warning})
+                    end
                 end
-                if forceUpdateList then listUpdatePending = true lastInputTime = 0 forceUpdateList = false else listUpdatePending = true lastInputTime = now end
+                
+                if forceUpdateList then
+                    listUpdatePending = true
+                    lastInputTime = 0
+                    forceUpdateList = false
+                else
+                    listUpdatePending = true
+                    lastInputTime = now
+                end
             end
         end
 
@@ -2408,11 +2781,15 @@ runConn = RunService.RenderStepped:Connect(function()
                 isAutoPlayScheduled = true
                 local targetWord = currentBestMatch
                 local snapshotDetected = lastDetected
+                
                 task.spawn(function()
                     local delay = isBlatant and 0.15 or (0.8 + math.random() * 0.5)
                     task.wait(delay)
+                    
                     local stillMyTurn, _ = GetTurnInfo()
-                    if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then SmartType(targetWord, snapshotDetected, false) end
+                    if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
+                         SmartType(targetWord, snapshotDetected, false)
+                    end
                     isAutoPlayScheduled = false
                 end)
             end
