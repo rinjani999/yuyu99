@@ -47,7 +47,7 @@ local BlacklistFile = "WordHelper_Blacklist.json" -- File baru untuk Blacklist P
 
 local Config = {
     CPM = 550,
-    Blatant = false,
+    BlatantMode = "Off", -- Diganti dari boolean menjadi string: "Off", "On", "Auto"
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -84,7 +84,14 @@ local function LoadConfig()
     if isfile and isfile(ConfigFile) then
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
-            for k, v in pairs(decoded) do Config[k] = v end
+            for k, v in pairs(decoded) do 
+                -- Migrasi config lama (boolean) ke baru (string)
+                if k == "Blatant" and type(v) == "boolean" then
+                    Config.BlatantMode = v and "On" or "Off"
+                else
+                    Config[k] = v 
+                end
+            end
         end
     end
 end
@@ -116,7 +123,7 @@ LoadConfig()
 LoadBlacklist() -- Load blacklist saat startup
 
 local currentCPM = Config.CPM
-local isBlatant = Config.Blatant
+local isBlatant = (Config.BlatantMode == "On") -- Inisialisasi awal
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -665,6 +672,25 @@ ExpandBtn.MouseButton1Click:Connect(function()
     UpdateLayout()
 end)
 
+-- MINIMIZE BUTTON FIXED LOGIC
+MinBtn.MouseButton1Click:Connect(function()
+    local isMin = MainFrame.Size.Y.Offset < 100
+    if not isMin then
+        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 45)})
+        ScrollList.Visible = false
+        SettingsFrame.Visible = false
+        StatusFrame.Visible = false
+        MinBtn.Text = "+"
+    else
+        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 500)})
+        ScrollList.Visible = true
+        SettingsFrame.Visible = true
+        StatusFrame.Visible = true
+        MinBtn.Text = "-"
+        UpdateLayout() -- Force update internal layout to match settingsCollapsed state
+    end
+end)
+
 local function SetupSlider(btn, bg, fill, callback)
     btn.MouseButton1Down:Connect(function()
         local move, rel
@@ -1025,12 +1051,28 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
-    isBlatant = not isBlatant
-    Config.Blatant = isBlatant
-    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and THEME.Error or THEME.SubText
+-- BLATANT MODE TOGGLE (OFF -> ON -> AUTO)
+local BlatantBtn = CreateToggle("Blatant: " .. Config.BlatantMode, UDim2.new(0, 15, 0, 115), function()
+    if Config.BlatantMode == "Off" then
+        Config.BlatantMode = "On"
+    elseif Config.BlatantMode == "On" then
+        Config.BlatantMode = "Auto"
+    else
+        Config.BlatantMode = "Off"
+    end
+    
+    local color = THEME.SubText
+    if Config.BlatantMode == "On" then color = THEME.Error
+    elseif Config.BlatantMode == "Auto" then color = THEME.Warning end
+    
+    return true, "Blatant: " .. Config.BlatantMode, color
 end)
-BlatantBtn.TextColor3 = isBlatant and THEME.Error or THEME.SubText
+
+-- Init Initial Color
+if Config.BlatantMode == "On" then BlatantBtn.TextColor3 = THEME.Error
+elseif Config.BlatantMode == "Auto" then BlatantBtn.TextColor3 = THEME.Warning
+else BlatantBtn.TextColor3 = THEME.SubText end
+
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -1752,11 +1794,14 @@ local function DetectErrorOnScreen()
         for _, c in ipairs(obj:GetChildren()) do
             if c:IsA("TextLabel") or c:IsA("TextButton") then
                 local t = c.Text:lower()
-                if t:find("already used") or t:find("used word") or t:find("not in dictionary") or t:find("invalid") then
-                    return true
+                if t:find("already used") or t:find("used word") then
+                    return "Used"
+                elseif t:find("not in dictionary") or t:find("invalid") then
+                    return "Invalid"
                 end
             end
-            if Scan(c) then return true end
+            local res = Scan(c)
+            if res then return res end
         end
         return false
     end
@@ -1846,12 +1891,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
         -- VERIFICATION PHASE
         local verifyStart = tick()
         local accepted = false
-        local rejectedByScreen = false
+        local errorType = nil
         
         while (tick() - verifyStart) < 1.5 do
             local currentCheck = GetCurrentGameWord()
-            if DetectErrorOnScreen() then
-                rejectedByScreen = true
+            errorType = DetectErrorOnScreen()
+            if errorType then
                 break
             end
             if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
@@ -1862,22 +1907,26 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
         end
         
         -- [RETRY LOGIC FIX]
-        if not accepted or rejectedByScreen then
-            -- Blacklist logic
-            if rejectedByScreen then
-                ShowToast("Detected 'Already Used' - Blacklisting " .. targetWord, "error")
+        if not accepted or errorType then
+            -- Blacklist logic logic
+            if errorType == "Used" then
+                -- ALREADY USED: Only cache for this session, DO NOT SAVE
+                ShowToast("Detected 'Already Used' - Skipping " .. targetWord, "warning")
+                UsedWords[targetWord] = true
+                StatusText.Text = "Skipped: Already Used '" .. targetWord .. "'"
+                StatusText.TextColor3 = THEME.Warning
+            else
+                -- INVALID: Blacklist permanently
+                Blacklist[targetWord] = true
+                SaveBlacklist()
+                StatusText.Text = "Rejected: Blacklisted '" .. targetWord .. "'"
+                StatusText.TextColor3 = THEME.Error
             end
-
-            Blacklist[targetWord] = true
-            SaveBlacklist() -- Save immediately
             
             -- Remove from runtime cache to trigger new word selection
             for k, list in pairs(RandomOrderCache) do
                 for i = #list, 1, -1 do if list[i] == targetWord then table.remove(list, i) end end
             end
-            
-            StatusText.Text = "Rejected: Blacklisted '" .. targetWord .. "'"
-            StatusText.TextColor3 = THEME.Error
             
             local focused = UserInputService:GetFocusedTextBox()
             if focused and focused:IsDescendantOf(game) and focused.TextEditable then focused.Text = "" else Backspace(#targetWord + 5) end
@@ -2117,6 +2166,13 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         else StatsData.Frame.Visible = false end
 
+        -- AUTO BLATANT LOGIC
+        local autoBlatantActive = false
+        if Config.BlatantMode == "Auto" and seconds and seconds < 5 then
+            autoBlatantActive = true
+        end
+        isBlatant = (Config.BlatantMode == "On") or autoBlatantActive
+
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
         if (now - lastWordCheck) > 0.05 then
             cachedDetected, cachedCensored = GetCurrentGameWord(frame)
@@ -2182,10 +2238,11 @@ runConn = RunService.RenderStepped:Connect(function()
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
         
-        -- [CACHE CLEAR LOGIC]
-        if typeVisible and not lastTypeVisible then
-            UsedWords = {} -- Clear used words on new round
-            StatusText.Text = "New Round - Cache Cleared"
+        -- [CACHE CLEAR LOGIC FIXED]
+        -- Logic: If type was visible (lastTypeVisible=true) but now is hidden (typeVisible=false), round ended.
+        if not typeVisible and lastTypeVisible then
+            UsedWords = {} -- Clear used words when round ENDS
+            StatusText.Text = "Round Ended - Cache Cleared"
             StatusText.TextColor3 = THEME.Success
         end
         lastTypeVisible = typeVisible
