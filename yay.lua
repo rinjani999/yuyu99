@@ -44,7 +44,7 @@ local BlacklistFile = "blacklist.txt" -- File penyimpanan blacklist
 
 local Config = {
     CPM = 550,
-    Blatant = false,
+    BlatantMode = "Off", -- Modified to string state: "Off", "On", "Auto"
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -79,6 +79,11 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
+            -- Migration from legacy boolean
+            if decoded.Blatant ~= nil then
+                Config.BlatantMode = decoded.Blatant and "On" or "Off"
+            end
+            if not Config.BlatantMode then Config.BlatantMode = "Off" end
         end
     end
 end
@@ -128,7 +133,8 @@ LoadBlacklist()
 -- ==================================
 
 local currentCPM = Config.CPM
-local isBlatant = Config.Blatant
+local blatantMode = Config.BlatantMode or "Off"
+local isBlatant = (blatantMode == "On")
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -1100,12 +1106,30 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
-    isBlatant = not isBlatant
-    Config.Blatant = isBlatant
-    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
+local function GetBlatantStateText(mode)
+    return "Blatant Mode: " .. mode:upper()
+end
+
+local function GetBlatantColor(mode)
+    if mode == "On" then return Color3.fromRGB(255, 80, 80)
+    elseif mode == "Auto" then return Color3.fromRGB(255, 200, 80)
+    else return THEME.SubText end
+end
+
+local BlatantBtn = CreateToggle(GetBlatantStateText(blatantMode), UDim2.new(0, 15, 0, 115), function()
+    if blatantMode == "Off" then blatantMode = "On"
+    elseif blatantMode == "On" then blatantMode = "Auto"
+    else blatantMode = "Off" end
+    
+    Config.BlatantMode = blatantMode
+    
+    -- Visual update for toggle (loop handles auto logic)
+    if blatantMode == "On" then isBlatant = true
+    elseif blatantMode == "Off" then isBlatant = false end
+    
+    return true, GetBlatantStateText(blatantMode), GetBlatantColor(blatantMode)
 end)
-BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
+BlatantBtn.TextColor3 = GetBlatantColor(blatantMode)
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -2763,9 +2787,24 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
+
+                -- Auto Blatant Mode Logic
+                if blatantMode == "Auto" then
+                    if seconds and seconds < 5 then
+                        isBlatant = true
+                    else
+                        isBlatant = false
+                    end
+                elseif blatantMode == "On" then
+                    isBlatant = true
+                else
+                    isBlatant = false
+                end
             end
         else
             StatsData.Frame.Visible = false
+            -- Reset blatant if auto when not visible
+            if blatantMode == "Auto" then isBlatant = false end
         end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
