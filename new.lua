@@ -1342,6 +1342,8 @@ local function RefreshCustomWords()
             del.MouseButton1Click:Connect(function()
                 table.remove(Config.CustomWords, i)
                 SaveConfig()
+                Blacklist[w] = true
+                SaveBlacklist()
                 RefreshCustomWords()
                 ShowToast("Removed custom word: " .. w, "warning")
             end)
@@ -2527,23 +2529,7 @@ UpdateList = function(detectedText, requiredLetter)
     ScrollList.CanvasSize = UDim2.new(0,0,0, UIListLayout.AbsoluteContentSize.Y)
 end
 
-MinBtn.MouseButton1Click:Connect(function()
-    local isMin = MainFrame.Size.Y.Offset < 100
-    if not isMin then
-        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 45)})
-        ScrollList.Visible = false
-        SettingsFrame.Visible = false
-        StatusFrame.Visible = false
-        MinBtn.Text = "+"
-    else
-        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 500)})
-        task.wait(0.2)
-        ScrollList.Visible = true
-        SettingsFrame.Visible = true
-        StatusFrame.Visible = true
-        MinBtn.Text = "-"
-    end
-end)
+
 
 local lastTypeVisible = false
 local lastRequiredLetter = ""
