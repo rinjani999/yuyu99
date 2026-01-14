@@ -1,6 +1,3 @@
--- [[ WORD HELPER V4 - FIXED VERSION ]] --
-
--- === SAFE ENVIRONMENT SETUP ===
 local cloneref = cloneref or function(o) return o end
 local gethui = gethui or function() return game:GetService("CoreGui") end
 
