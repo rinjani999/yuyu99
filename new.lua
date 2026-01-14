@@ -1586,14 +1586,16 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 if UsedWords[targetWord] then
                      ShowToast("Already used (Race Condition)!", "warning")
                 else
-                     -- Jika tidak ditemukan di UsedWords dan ditolak, asumsikan invalid
-                     Blacklist[targetWord] = true
-                     SaveBlacklist()
-                     
+                    -- LOGIKA BARU: Cek apakah nyawa berkurang
                      if finalStrikes > initialStrikes then
+                         -- Nyawa berkurang = INVALID WORD (Kamus Salah)
+                         Blacklist[targetWord] = true
+                         SaveBlacklist()
                          ShowToast("Invalid Word (Strike Detected)", "error")
                      else
-                         ShowToast("Invalid Word (Rejected)", "error")
+                         -- Nyawa TIDAK berkurang = ALREADY USED (Sudah Dipakai)
+                         UsedWords[targetWord] = true
+                         ShowToast("Marked as Used (No Strike Loss)", "warning")
                      end
                 end
 
@@ -1762,14 +1764,16 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 if UsedWords[targetWord] then
                      ShowToast("Already used (Race Condition)!", "warning")
                 else
-                     -- Jika ditolak dan tidak ada di UsedWords, kemungkinan besar INVALID
-                     Blacklist[targetWord] = true
-                     SaveBlacklist()
-                     
+                     -- LOGIKA BARU: Cek apakah nyawa berkurang
                      if finalStrikes > initialStrikes then
+                         -- Nyawa berkurang = INVALID WORD (Kamus Salah)
+                         Blacklist[targetWord] = true
+                         SaveBlacklist()
                          ShowToast("Invalid Word (Strike Detected)", "error")
                      else
-                         ShowToast("Invalid Word (Rejected)", "error")
+                         -- Nyawa TIDAK berkurang = ALREADY USED (Sudah Dipakai)
+                         UsedWords[targetWord] = true
+                         ShowToast("Marked as Used (No Strike Loss)", "warning")
                      end
                 end
 
