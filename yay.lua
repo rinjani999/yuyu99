@@ -45,7 +45,7 @@ local BlacklistFile = "blacklist.json" -- File JSON untuk blacklist permanen
 
 local Config = {
     CPM = 550,
-    Blatant = false,
+    Blatant = false, -- Bisa boolean atau string "Auto"
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -109,7 +109,8 @@ end
 LoadConfig()
 
 local currentCPM = Config.CPM
-local isBlatant = Config.Blatant
+-- isBlatant akan diupdate secara dinamis jika mode Auto aktif
+local isBlatant = (Config.Blatant == true) 
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -1110,13 +1111,47 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
-    isBlatant = not isBlatant
-    Config.Blatant = isBlatant
-    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
-end)
-BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
+-- [3] UPDATE BLATANT MODE BUTTON (OFF -> ON -> AUTO)
+local function GetBlatantText()
+    if Config.Blatant == "Auto" then return "Blatant Mode: AUTO"
+    elseif Config.Blatant then return "Blatant Mode: ON"
+    else return "Blatant Mode: OFF" end
+end
+
+local function GetBlatantColor()
+    if Config.Blatant == "Auto" then return Color3.fromRGB(255, 200, 80) -- Orange for Auto
+    elseif Config.Blatant then return Color3.fromRGB(255, 80, 80) -- Red for On
+    else return THEME.SubText end
+end
+
+local BlatantBtn = Instance.new("TextButton", TogglesFrame)
+BlatantBtn.Text = GetBlatantText()
+BlatantBtn.Font = Enum.Font.GothamMedium
+BlatantBtn.TextSize = 11
+BlatantBtn.TextColor3 = GetBlatantColor()
+BlatantBtn.BackgroundColor3 = THEME.Background
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
+BlatantBtn.Position = UDim2.new(0, 15, 0, 115)
+Instance.new("UICorner", BlatantBtn).CornerRadius = UDim.new(0, 4)
+
+BlatantBtn.MouseButton1Click:Connect(function()
+    if Config.Blatant == false then
+        Config.Blatant = true
+    elseif Config.Blatant == true then
+        Config.Blatant = "Auto"
+    else
+        Config.Blatant = false
+    end
+    
+    BlatantBtn.Text = GetBlatantText()
+    BlatantBtn.TextColor3 = GetBlatantColor()
+    
+    -- Update immediate state if not Auto
+    if Config.Blatant ~= "Auto" then
+        isBlatant = Config.Blatant
+    end
+    SaveConfig()
+end)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
     riskyMistakes = not riskyMistakes
@@ -1155,6 +1190,17 @@ ServerBrowserBtn.BackgroundColor3 = THEME.Background
 ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
 ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
+
+-- [4] BLACKLIST MANAGER BUTTON & UI
+local BlacklistManagerBtn = Instance.new("TextButton", TogglesFrame)
+BlacklistManagerBtn.Text = "Blacklist Manager"
+BlacklistManagerBtn.Font = Enum.Font.GothamMedium
+BlacklistManagerBtn.TextSize = 11
+BlacklistManagerBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BlacklistManagerBtn.BackgroundColor3 = THEME.Background
+BlacklistManagerBtn.Size = UDim2.new(0, 265, 0, 24)
+BlacklistManagerBtn.Position = UDim2.new(0, 15, 0, 235)
+Instance.new("UICorner", BlacklistManagerBtn).CornerRadius = UDim.new(0, 4)
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
@@ -1276,7 +1322,6 @@ local function RefreshCustomWords()
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
             
             row.MouseButton1Click:Connect(function()
-                -- SmartType(w, lastDetected, true, true) -- Removed auto type here
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
                      Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
@@ -1360,6 +1405,123 @@ CWAddBtn.MouseButton1Click:Connect(function()
 end)
 
 RefreshCustomWords()
+
+-- === BLACKLIST UI IMPLEMENTATION ===
+local BlacklistFrame = Instance.new("Frame", ScreenGui)
+BlacklistFrame.Name = "BlacklistFrame"
+BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
+BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175)
+BlacklistFrame.BackgroundColor3 = THEME.Background
+BlacklistFrame.Visible = false
+BlacklistFrame.ClipsDescendants = true
+EnableDragging(BlacklistFrame)
+Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
+local BLStroke = Instance.new("UIStroke", BlacklistFrame)
+BLStroke.Color = Color3.fromRGB(255, 80, 80)
+BLStroke.Transparency = 0.5
+BLStroke.Thickness = 2
+
+local BLHeader = Instance.new("TextLabel", BlacklistFrame)
+BLHeader.Text = "Blacklist Manager"
+BLHeader.Font = Enum.Font.GothamBold
+BLHeader.TextSize = 14
+BLHeader.TextColor3 = THEME.Text
+BLHeader.Size = UDim2.new(1, 0, 0, 35)
+BLHeader.BackgroundTransparency = 1
+
+local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
+BLCloseBtn.Text = "X"
+BLCloseBtn.Font = Enum.Font.GothamBold
+BLCloseBtn.TextSize = 14
+BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+BLCloseBtn.BackgroundTransparency = 1
+BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
+
+local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
+BLSearchBox.Font = Enum.Font.Gotham
+BLSearchBox.TextSize = 12
+BLSearchBox.BackgroundColor3 = THEME.ItemBG
+BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
+BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
+BLSearchBox.TextColor3 = THEME.Text
+Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(BLSearchBox, "Search blacklist...")
+
+local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
+BLScroll.Size = UDim2.new(1, -10, 1, -70)
+BLScroll.Position = UDim2.new(0, 5, 0, 65)
+BLScroll.BackgroundTransparency = 1
+BLScroll.ScrollBarThickness = 2
+BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
+BLScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local BLListLayout = Instance.new("UIListLayout", BLScroll)
+BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BLListLayout.Padding = UDim.new(0, 2)
+
+local function RefreshBlacklist()
+    for _, c in ipairs(BLScroll:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
+    local queryRaw = BLSearchBox.Text
+    local query = (queryRaw == "Search blacklist...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
+    
+    local sortedList = {}
+    for k, v in pairs(Blacklist) do
+        table.insert(sortedList, k)
+    end
+    table.sort(sortedList)
+    
+    local shownCount = 0
+    for _, w in ipairs(sortedList) do
+        if query == "" or w:find(query, 1, true) then
+            shownCount = shownCount + 1
+            local row = Instance.new("Frame", BLScroll)
+            row.Size = UDim2.new(1, -6, 0, 22)
+            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Text = w
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 12
+            lbl.TextColor3 = THEME.Text
+            lbl.Size = UDim2.new(1, -30, 1, 0)
+            lbl.Position = UDim2.new(0, 5, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local del = Instance.new("TextButton", row)
+            del.Text = "X"
+            del.Font = Enum.Font.GothamBold
+            del.TextSize = 11
+            del.TextColor3 = Color3.fromRGB(255, 80, 80)
+            del.Size = UDim2.new(0, 22, 1, 0)
+            del.Position = UDim2.new(1, -22, 0, 0)
+            del.BackgroundTransparency = 1
+            
+            del.MouseButton1Click:Connect(function()
+                Blacklist[w] = nil
+                SaveBlacklist()
+                RefreshBlacklist()
+                ShowToast("Removed from blacklist: " .. w, "success")
+            end)
+        end
+    end
+    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+end
+
+BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklist)
+BlacklistManagerBtn.MouseButton1Click:Connect(function()
+    BlacklistFrame.Visible = not BlacklistFrame.Visible
+    BlacklistFrame.Parent = nil
+    BlacklistFrame.Parent = ScreenGui
+    if BlacklistFrame.Visible then RefreshBlacklist() end
+end)
 
 local ServerFrame = Instance.new("Frame", ScreenGui)
 ServerFrame.Name = "ServerBrowser"
@@ -2455,6 +2617,19 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
+                
+                -- [4] AUTO BLATANT LOGIC
+                if Config.Blatant == "Auto" then
+                    if seconds and seconds < 5 then
+                        isBlatant = true
+                        StatusText.Text = "Auto Blatant Active!"
+                        StatusText.TextColor3 = Color3.fromRGB(255, 100, 50)
+                    else
+                        isBlatant = false
+                    end
+                else
+                    isBlatant = Config.Blatant
+                end
             end
         else
             StatsData.Frame.Visible = false
@@ -2467,6 +2642,16 @@ runConn = RunService.RenderStepped:Connect(function()
             lastWordCheck = now
         end
         local detected, censored = cachedDetected, cachedCensored
+        
+        -- [2] AUTO READ OPPONENT WORDS (SAMA SEPERTI YAY.LUA)
+        -- Jika ada kata terdeteksi, tidak disensor, dan bukan giliran kita, masukkan ke cache
+        if detected ~= "" and not censored and not isMyTurn then
+             if not UsedWords[detected] then
+                 UsedWords[detected] = true
+                 -- Opsional: Print ke console jika ingin debug
+                 -- print("Opponent wrote: " .. detected)
+             end
+        end
 
         if isVisible and isMyTurn and not isTyping and seconds and seconds < 1.5 then
             local char = (requiredLetter or ""):lower()
@@ -2573,6 +2758,7 @@ runConn = RunService.RenderStepped:Connect(function()
 
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
+        -- [1] AUTO CLEAR CACHE SETIAP RONDE (SAMA SEPERTI YAY.LUA)
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
             StatusText.Text = "New Round - Words Reset"
