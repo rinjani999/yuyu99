@@ -2223,6 +2223,9 @@ runConn = RunService.RenderStepped:Connect(function()
                 else
                     isBlatant = (Config.Blatant == true)
                 end
+            else
+                -- Jika timer tidak ada (misal: intermission), sembunyikan stats frame
+                StatsData.Frame.Visible = false
             end
         else
             StatsData.Frame.Visible = false
@@ -2238,7 +2241,8 @@ runConn = RunService.RenderStepped:Connect(function()
         
         -- [2] AUTO READ OPPONENT WORDS
         -- Membaca kata lawan yang valid dan memasukkannya ke cache UsedWords
-        if detected ~= "" and not censored and not isMyTurn then
+        -- HANYA JIKA GAME VISIBLE
+        if isVisible and detected ~= "" and not censored and not isMyTurn then
              if not UsedWords[detected] then
                  UsedWords[detected] = true
                  -- Opsional: visual feedback debug
