@@ -1,11 +1,10 @@
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
+-- [[ WORD HELPER V4 - FIXED VERSION ]] --
 
+-- === SAFE ENVIRONMENT SETUP ===
 local cloneref = cloneref or function(o) return o end
-local gethui = gethui or function() return CoreGui end
+local gethui = gethui or function() return game:GetService("CoreGui") end
 
+local HttpService = game:GetService("HttpService")
 local CoreGui = cloneref(game:GetService("CoreGui"))
 local Players = cloneref(game:GetService("Players"))
 local VirtualInputManager = cloneref(game:GetService("VirtualInputManager"))
@@ -14,7 +13,9 @@ local RunService = cloneref(game:GetService("RunService"))
 local TweenService = cloneref(game:GetService("TweenService"))
 local LogService = cloneref(game:GetService("LogService"))
 local GuiService = cloneref(game:GetService("GuiService"))
+local RbxAnalyticsService = game:GetService("RbxAnalyticsService")
 
+-- Handle Request Function Compatibility
 local request = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 
 local TOGGLE_KEY = Enum.KeyCode.RightControl
@@ -45,7 +46,7 @@ local BlacklistFile = "blacklist.json"
 
 local Config = {
     CPM = 550,
-    Blatant = false, -- Bisa boolean atau string "Auto"
+    Blatant = false,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -71,7 +72,7 @@ local Config = {
 
 -- === SYSTEM BLACKLIST & CACHE ===
 local Blacklist = {}
-local UsedWords = {} -- Cache sementara untuk ronde ini
+local UsedWords = {} 
 
 local function SaveBlacklist()
     if writefile then
@@ -133,7 +134,7 @@ local unloaded = false
 local isMyTurnLogDetected = false
 local logRequiredLetters = ""
 local turnExpiryTime = 0
-local lastBlatantState = false -- Untuk mendeteksi transisi Auto Blatant
+local lastBlatantState = false
 
 local RandomOrderCache = {}
 local RandomPriority = {}
@@ -216,6 +217,12 @@ end
 
 -- Startup: Always fetch fresh word list
 local function FetchWords()
+    if not request then
+        UpdateStatus("Executor missing HTTP support! using cache.", Color3.fromRGB(255, 80, 80))
+        task.wait(1)
+        return
+    end
+
     UpdateStatus("Fetching latest word list...", THEME.Warning)
     local success, res = pcall(function()
         return request({Url = url, Method = "GET"})
@@ -249,6 +256,8 @@ local function LoadList(fname)
         UpdateStatus("Loaded " .. #Words .. " words!", THEME.Success)
     else
          UpdateStatus("No word list found!", Color3.fromRGB(255, 80, 80))
+         -- Fallback minimal dictionary to prevent errors
+         Words = {"apple", "banana", "cat", "dog", "elephant"} 
     end
     task.wait(1)
 end
@@ -385,7 +394,6 @@ local function GetTurnInfo(providedFrame)
 end
 
 -- === CRITICAL HELPER: GetRemainingTime ===
--- Fungsi ini sangat penting untuk fitur Panic Override
 local function GetRemainingTime()
     local player = Players.LocalPlayer
     local gui = player and player:FindFirstChild("PlayerGui")
@@ -458,7 +466,7 @@ ToastContainer.Name = "ToastContainer"
 ToastContainer.Size = UDim2.new(0, 300, 1, 0)
 ToastContainer.Position = UDim2.new(1, -320, 0, 20)
 ToastContainer.BackgroundTransparency = 1
-ToastContainer.ZIndex = 200 -- ZIndex tertinggi
+ToastContainer.ZIndex = 200 
 
 local function ShowToast(message, type)
     local toast = Instance.new("Frame")
@@ -1221,7 +1229,7 @@ CustomWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
 CustomWordsFrame.BackgroundColor3 = THEME.Background
 CustomWordsFrame.Visible = false
 CustomWordsFrame.ClipsDescendants = true
-CustomWordsFrame.ZIndex = 50 -- Agar muncul di atas MainFrame
+CustomWordsFrame.ZIndex = 50 
 EnableDragging(CustomWordsFrame)
 Instance.new("UICorner", CustomWordsFrame).CornerRadius = UDim.new(0, 8)
 local CWStroke = Instance.new("UIStroke", CustomWordsFrame)
@@ -1304,7 +1312,7 @@ CWAddBtn.Size = UDim2.new(0, 50, 0, 24)
 CWAddBtn.Position = UDim2.new(1, -60, 1, -35)
 Instance.new("UICorner", CWAddBtn).CornerRadius = UDim.new(0, 4)
 
--- 2. Word Browser Window (BARU: Kode ini hilang di versi sebelumnya)
+-- 2. Word Browser Window 
 local WordBrowserFrame = Instance.new("Frame", ScreenGui)
 WordBrowserFrame.Name = "WordBrowserFrame"
 WordBrowserFrame.Size = UDim2.new(0, 250, 0, 350)
@@ -1687,11 +1695,9 @@ end)
 RefreshCustomWords()
 
 -- === KONEKSI TOMBOL UTAMA ===
--- Sekarang aman dikoneksikan karena Frame-nya sudah didefinisikan di atas
 
 ManageWordsBtn.MouseButton1Click:Connect(function()
     CustomWordsFrame.Visible = not CustomWordsFrame.Visible
-    -- Hack ZIndex: Re-parenting untuk memaksa ke depan (jika diperlukan)
     CustomWordsFrame.Parent = nil
     CustomWordsFrame.Parent = ScreenGui
 end)
@@ -1721,6 +1727,11 @@ end)
 
 -- === SERVER BROWSER LOGIC ===
 local function FetchServers()
+    if not request then
+        ShowToast("HTTP Request not supported by your executor!", "error")
+        return
+    end
+
     SBRefresh.Text = "..."
     for _, c in ipairs(SBList:GetChildren()) do
         if c:IsA("Frame") then c:Destroy() end
@@ -1826,7 +1837,7 @@ end)
 
 -- === LOGIKA HUMANIZATION & INPUT ===
 
--- Flag untuk reset saat mode Auto Blatant aktif (akan diatur oleh Loop Utama di Part 4)
+-- Flag untuk reset saat mode Auto Blatant aktif
 local needsBlatantReset = false 
 
 local function CalculateDelay()
@@ -2014,8 +2025,6 @@ end
 
 -- Fungsi Helper Timer untuk Panic Mode (Menggunakan referensi dari Part 1)
 local function GetTimerSecondsHelper()
-    -- Menggunakan logika yang sama dengan GetRemainingTime di Part 1
-    -- Kita definisikan ulang disini untuk memastikan akses lokal di closure ini
     local player = Players.LocalPlayer
     local gui = player and player:FindFirstChild("PlayerGui")
     local frame = gui and gui:FindFirstChild("InGame") and gui.InGame:FindFirstChild("Frame")
@@ -2043,7 +2052,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
         end
     end
 
-    -- [3] CEK DUPLIKASI SEBELUM MENGETIK
     if UsedWords[targetWord] and not isCorrection then
         ShowToast("Already used!", "warning")
         StatusText.Text = "Skipped (Used): " .. targetWord
@@ -2053,7 +2061,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
     isTyping = true
     lastTypingStart = tick()
     
-    -- [4] SNAPSHOT STRIKES AWAL
     local initialStrikes = GetStrikeCount()
     
     local targetBox = GetGameTextBox()
@@ -2068,7 +2075,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
     local success, err = pcall(function()
         if isCorrection then
-            -- Logika Koreksi (Backspace dan ketik ulang sebagian)
             local commonLen = 0
             local minLen = math.min(#targetWord, #currentDetected)
             for i = 1, minLen do
@@ -2100,7 +2106,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
             end
 
-            -- Pre-submission verify
             local finalCheck = GetGameTextBox()
             if not riskyMistakes then
                 task.wait(0.1)
@@ -2117,7 +2122,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
             PressEnter()
             
-            -- Verifikasi Input
             local verifyStart = tick()
             local accepted = false
             
@@ -2131,7 +2135,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                -- Logika penanganan kegagalan (Blacklist vs UsedWords)
                 local finalStrikes = GetStrikeCount()
                 if finalStrikes > initialStrikes then
                     Blacklist[targetWord] = true
@@ -2178,20 +2181,17 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             local letters = "abcdefghijklmnopqrstuvwxyz"
-            local panicModeActive = false -- Flag lokal untuk panic override
+            local panicModeActive = false 
             
             for i = 1, #missingPart do
-                -- [LOGIKA 1: AUTO BLATANT RESET]
-                -- Jika trigger aktif (dari Loop Part 4), reset pengetikan
                 if needsBlatantReset then
                     needsBlatantReset = false
                     local focused = UserInputService:GetFocusedTextBox()
                     if focused and focused:IsDescendantOf(game) and focused.TextEditable then
                         local len = #focused.Text
-                        Backspace(len + 1) -- Hapus semua
+                        Backspace(len + 1) 
                         task.wait(0.1)
                         isTyping = false 
-                        -- Panggil ulang SmartType secara rekursif dengan mode bypass
                         return SmartType(targetWord, "", false, true)
                     end
                 end
@@ -2201,8 +2201,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                      if not GetTurnInfo() then break end
                 end
 
-                -- [LOGIKA 2: PANIC OVERRIDE]
-                -- Cek waktu, jika < 10 detik, abaikan error rate dan percepat
                 local timer = GetTimerSecondsHelper()
                 if timer and timer < 10 and (useHumanization or errorRate > 0) then
                     panicModeActive = true
@@ -2210,12 +2208,10 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
 
                 local ch = missingPart:sub(i, i)
                 
-                -- Jika Panic Mode atau Blatant Mode aktif
                 if panicModeActive or isBlatant then
                      SimulateKey(ch)
-                     task.wait(0.005) -- Delay minimal
+                     task.wait(0.005) 
                 else
-                    -- Normal Humanize Logic dengan Error Rate
                     if errorRate > 0 and (math.random() < (errorRate / 100)) then
                         local typoChar
                         repeat
@@ -2233,9 +2229,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                         lastKey = typoChar
                         local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
                         
-                        -- Cek timer lagi sebelum menunggu lama
                         if GetTimerSecondsHelper() and GetTimerSecondsHelper() < 10 then
-                             task.wait(0.05) -- Jangan menunggu jika waktu mepet
+                             task.wait(0.05) 
                         else
                              task.wait(realize)
                         end
@@ -2257,7 +2252,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
             end
 
-            -- Pre-submission verify (Skip jika risky atau panic)
             if not riskyMistakes and not panicModeActive then
                 task.wait(0.1)
                 local finalCheck = GetGameTextBox()
@@ -2287,7 +2281,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                
                 local postCheck = GetGameTextBox()
                 if postCheck and postCheck.Text == targetWord then
                      StatusText.Text = "Enter failed? Retrying..."
@@ -2768,13 +2761,12 @@ runConn = RunService.RenderStepped:Connect(function()
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
                 
-                -- [4] AUTO BLATANT LOGIC (Diperbarui: Trigger < 7 Detik)
                 if Config.Blatant == "Auto" then
                     if seconds and seconds < 7 then
-                        if not isBlatant then -- Transisi dari OFF ke ON (Trigger)
+                        if not isBlatant then 
                             isBlatant = true
                             if isTyping then
-                                needsBlatantReset = true -- Flag global untuk mereset SmartType (Part 3)
+                                needsBlatantReset = true 
                             end
                         end
                         StatusText.Text = "Auto Blatant Active! (< 7s)"
@@ -2798,17 +2790,12 @@ runConn = RunService.RenderStepped:Connect(function()
         end
         local detected, censored = cachedDetected, cachedCensored
         
-        -- [2] AUTO READ OPPONENT WORDS
-        -- Membaca kata lawan yang valid dan memasukkannya ke cache UsedWords
         if detected ~= "" and not censored and not isMyTurn then
              if not UsedWords[detected] then
                  UsedWords[detected] = true
-                 -- Opsional: visual feedback debug
-                 -- StatusText.Text = "Cached Opponent: " .. detected
              end
         end
 
-        -- Panic Save (Last second save)
         if isVisible and isMyTurn and not isTyping and seconds and seconds < 1.5 then
             local char = (requiredLetter or ""):lower()
             local bucket = Buckets[char]
@@ -2827,12 +2814,11 @@ runConn = RunService.RenderStepped:Connect(function()
                 if bestWord then
                     StatusText.Text = "PANIC SAVE!"
                     StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-                    SmartType(bestWord, detected, false, true) -- true = bypass turn check
+                    SmartType(bestWord, detected, false, true) 
                 end
             end
         end
 
-        -- Auto Join Logic
         if autoJoin and (now - lastAutoJoinCheck > AUTO_JOIN_RATE) then
             lastAutoJoinCheck = now
             task.spawn(function()
@@ -2916,7 +2902,6 @@ runConn = RunService.RenderStepped:Connect(function()
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
         
-        -- [1] AUTO CLEAR CACHE SETIAP RONDE
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
             StatusText.Text = "New Round - Words Reset"
@@ -3016,7 +3001,6 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Auto Play Logic
         if autoPlay and not isTyping and not isAutoPlayScheduled and currentBestMatch and detected == lastDetected then
             local isMyTurnCheck, _ = GetTurnInfo(frame)
             if isMyTurnCheck then
