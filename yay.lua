@@ -1712,7 +1712,35 @@ local function GetKeyCode(char)
     return nil
 end
 
+local function GetGameTextBox()
+    local player = Players.LocalPlayer
+    local gui = player and player:FindFirstChild("PlayerGui")
+    local inGame = gui and gui:FindFirstChild("InGame")
+    if inGame then
+        local frame = inGame:FindFirstChild("Frame")
+        if frame then
+             for _, c in ipairs(frame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
+        end
+        for _, c in ipairs(inGame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
+    end
+    return UserInputService:GetFocusedTextBox()
+end
+
 local function SimulateKey(input)
+    -- GUARD CLAUSE: Prevent character movement (WASD)
+    local focused = UserInputService:GetFocusedTextBox()
+    if not focused then
+        -- Attempt to regain focus to game box
+        local gameBox = GetGameTextBox()
+        if gameBox then 
+            gameBox:CaptureFocus() 
+            task.wait(0.05)
+            focused = UserInputService:GetFocusedTextBox()
+        end
+        -- If still no focus, abort to prevent walking
+        if not focused then return end
+    end
+
     if typeof(input) == "string" and #input == 1 then
          local char = input
          local vimSuccess = pcall(function() VirtualInputManager:SendTextInput(char) end)
@@ -1768,24 +1796,10 @@ local function PressEnter()
     lastKey = nil
 end
 
-local function GetGameTextBox()
-    local player = Players.LocalPlayer
-    local gui = player and player:FindFirstChild("PlayerGui")
-    local inGame = gui and gui:FindFirstChild("InGame")
-    if inGame then
-        local frame = inGame:FindFirstChild("Frame")
-        if frame then
-             for _, c in ipairs(frame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
-        end
-        for _, c in ipairs(inGame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
-    end
-    return UserInputService:GetFocusedTextBox()
-end
-
 local function DetectErrorOnScreen()
     local player = Players.LocalPlayer
     local gui = player and player:FindFirstChild("PlayerGui")
-    if not gui then return false end
+    if not gui then return nil end
     
     local inGame = gui:FindFirstChild("InGame")
     
@@ -1793,21 +1807,23 @@ local function DetectErrorOnScreen()
     local function Scan(obj)
         for _, c in ipairs(obj:GetChildren()) do
             if c:IsA("TextLabel") or c:IsA("TextButton") then
-                local t = c.Text:lower()
-                if t:find("already used") or t:find("used word") then
-                    return "Used"
-                elseif t:find("not in dictionary") or t:find("invalid") then
-                    return "Invalid"
+                if c.Visible then
+                    local t = c.Text:lower()
+                    if t:find("already used") or t:find("used word") then
+                        return "Used"
+                    elseif t:find("not in dictionary") or t:find("invalid") then
+                        return "Invalid"
+                    end
                 end
             end
             local res = Scan(c)
             if res then return res end
         end
-        return false
+        return nil
     end
     
     if inGame then return Scan(inGame) end
-    return false
+    return nil
 end
 
 -- ================= SMART TYPE (FIXED RETRY LOGIC) =================
@@ -1906,21 +1922,30 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             task.wait(0.05)
         end
         
-        -- [RETRY LOGIC FIX]
+        -- [RETRY LOGIC FIX & BLACKLIST SAFETY]
         if not accepted or errorType then
-            -- Blacklist logic logic
+            -- Double check if round is still valid before saving to permanent blacklist
+            local isRoundActive, _ = GetTurnInfo()
+            
             if errorType == "Used" then
                 -- ALREADY USED: Only cache for this session, DO NOT SAVE
                 ShowToast("Detected 'Already Used' - Skipping " .. targetWord, "warning")
                 UsedWords[targetWord] = true
                 StatusText.Text = "Skipped: Already Used '" .. targetWord .. "'"
                 StatusText.TextColor3 = THEME.Warning
-            else
-                -- INVALID: Blacklist permanently
+            elseif errorType == "Invalid" and isRoundActive then
+                -- INVALID + Round Active: Blacklist permanently
                 Blacklist[targetWord] = true
                 SaveBlacklist()
                 StatusText.Text = "Rejected: Blacklisted '" .. targetWord .. "'"
                 StatusText.TextColor3 = THEME.Error
+            elseif not isRoundActive then
+                -- Round Ended during check? Ignore error
+                StatusText.Text = "Round Ended (Ignored Error)"
+                StatusText.TextColor3 = THEME.SubText
+            else
+                -- Unknown error (lag?), skip but don't blacklist
+                StatusText.Text = "Retry: Unknown Rejection"
             end
             
             -- Remove from runtime cache to trigger new word selection
@@ -1936,7 +1961,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             forceUpdateList = true 
             lastDetected = "---" -- Force re-detect
             
-            return -- Exit function, but runService will pick up next word immediately
+            return -- Exit function
         else
             StatusText.Text = "Word Cleared"
             StatusText.TextColor3 = THEME.SubText
