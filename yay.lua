@@ -1712,35 +1712,7 @@ local function GetKeyCode(char)
     return nil
 end
 
-local function GetGameTextBox()
-    local player = Players.LocalPlayer
-    local gui = player and player:FindFirstChild("PlayerGui")
-    local inGame = gui and gui:FindFirstChild("InGame")
-    if inGame then
-        local frame = inGame:FindFirstChild("Frame")
-        if frame then
-             for _, c in ipairs(frame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
-        end
-        for _, c in ipairs(inGame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
-    end
-    return UserInputService:GetFocusedTextBox()
-end
-
 local function SimulateKey(input)
-    -- GUARD CLAUSE: Prevent character movement (WASD)
-    local focused = UserInputService:GetFocusedTextBox()
-    if not focused then
-        -- Attempt to regain focus to game box
-        local gameBox = GetGameTextBox()
-        if gameBox then 
-            gameBox:CaptureFocus() 
-            task.wait(0.05)
-            focused = UserInputService:GetFocusedTextBox()
-        end
-        -- If still no focus, abort to prevent walking
-        if not focused then return end
-    end
-
     if typeof(input) == "string" and #input == 1 then
          local char = input
          local vimSuccess = pcall(function() VirtualInputManager:SendTextInput(char) end)
@@ -1782,18 +1754,18 @@ local function Backspace(count)
     end
     local key = Enum.KeyCode.Backspace
     for i = 1, count do
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, key, false, game)
-            VirtualInputManager:SendKeyEvent(false, key, false, game)
-        end)
-        if i % 20 == 0 then task.wait() end
+local function GetGameTextBox()
+    local player = Players.LocalPlayer
+    local gui = player and player:FindFirstChild("PlayerGui")
+    local inGame = gui and gui:FindFirstChild("InGame")
+    if inGame then
+        local frame = inGame:FindFirstChild("Frame")
+        if frame then
+             for _, c in ipairs(frame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
+        end
+        for _, c in ipairs(inGame:GetDescendants()) do if c:IsA("TextBox") and c.Visible then return c end end
     end
-    lastKey = nil
-end
-
-local function PressEnter()
-    SimulateKey(Enum.KeyCode.Return)
-    lastKey = nil
+    return UserInputService:GetFocusedTextBox()
 end
 
 local function DetectErrorOnScreen()
