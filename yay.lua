@@ -41,7 +41,7 @@ local function ColorToRGB(c)
 end
 
 local ConfigFile = "WordHelper_Config.json"
-local BlacklistFile = "blacklist.json" -- File blacklist terpisah
+local BlacklistFile = "blacklist.json" 
 
 local Config = {
     CPM = 550,
@@ -408,18 +408,14 @@ local function GetActiveStrikeCount()
     if not frame then return 0 end
 
     -- Biasanya strikes ada di dalam container atau langsung di frame
-    -- Kita cari ImageLabel yang berwarna merah (tanda silang aktif)
     local count = 0
     local descendants = frame:GetDescendants()
     
     for _, obj in ipairs(descendants) do
         if obj:IsA("ImageLabel") and obj.Visible then
-            -- Cek apakah gambarnya adalah "X" dan warnanya merah
-            -- Kita pakai threshold warna karena kadang ada efek transisi
             local col = obj.ImageColor3
             if col.R > 0.8 and col.G < 0.2 and col.B < 0.2 then
                 -- Ini kemungkinan besar adalah X merah (Strike aktif)
-                -- Pastikan bukan background atau dekorasi lain, biasanya strike ukurannya kecil
                 if obj.AbsoluteSize.X < 50 and obj.AbsoluteSize.X > 5 then
                     count = count + 1
                 end
@@ -864,6 +860,61 @@ local AutoJoinBtn = CreateToggle("Auto Join: "..(autoJoin and "ON" or "OFF"), UD
 end)
 AutoJoinBtn.Size = UDim2.new(0, 265, 0, 24)
 
+-- Helper for checkboxes
+local function CreateCheckbox(text, pos, key)
+    local container = Instance.new("TextButton", TogglesFrame)
+    container.Size = UDim2.new(0, 90, 0, 24)
+    container.Position = pos
+    container.BackgroundColor3 = THEME.ItemBG
+    container.AutoButtonColor = false
+    container.Text = ""
+    Instance.new("UICorner", container).CornerRadius = UDim.new(0, 4)
+    
+    local box = Instance.new("Frame", container)
+    box.Size = UDim2.new(0, 14, 0, 14)
+    box.Position = UDim2.new(0, 5, 0.5, -7)
+    box.BackgroundColor3 = THEME.Slider
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 3)
+    
+    local check = Instance.new("Frame", box)
+    check.Size = UDim2.new(0, 8, 0, 8)
+    check.Position = UDim2.new(0.5, -4, 0.5, -4)
+    check.BackgroundColor3 = THEME.Success
+    check.Visible = Config.AutoJoinSettings[key]
+    Instance.new("UICorner", check).CornerRadius = UDim.new(0, 2)
+    
+    local lbl = Instance.new("TextLabel", container)
+    lbl.Text = text
+    lbl.Font = Enum.Font.GothamMedium
+    lbl.TextSize = 11
+    lbl.TextColor3 = THEME.SubText
+    lbl.Size = UDim2.new(1, -25, 1, 0)
+    lbl.Position = UDim2.new(0, 25, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    
+    container.MouseButton1Click:Connect(function()
+        Config.AutoJoinSettings[key] = not Config.AutoJoinSettings[key]
+        check.Visible = Config.AutoJoinSettings[key]
+        if Config.AutoJoinSettings[key] then
+            lbl.TextColor3 = THEME.Text
+            Tween(box, {BackgroundColor3 = THEME.Accent}, 0.2)
+        else
+            lbl.TextColor3 = THEME.SubText
+            Tween(box, {BackgroundColor3 = THEME.Slider}, 0.2)
+        end
+        SaveConfig()
+    end)
+    if Config.AutoJoinSettings[key] then
+        lbl.TextColor3 = THEME.Text
+        box.BackgroundColor3 = THEME.Accent
+    end
+end
+
+CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
+CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
+CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
+
 -- Blatant Mode: OFF -> ON -> AUTO -> OFF
 local BlatantBtn = CreateToggle("Blatant: "..blatantMode, UDim2.new(0, 15, 0, 115), function()
     if blatantMode == "OFF" then blatantMode = "ON"
@@ -1052,6 +1103,309 @@ BlacklistManagerBtn.MouseButton1Click:Connect(function()
     BlacklistFrame.Parent = nil
     BlacklistFrame.Parent = ScreenGui
     if BlacklistFrame.Visible then RefreshBlacklistUI() end
+end)
+
+-- === UI: CUSTOM WORDS & BROWSER (Added Missing Parts) ===
+
+local function SetupPhantomBox(box, placeholder)
+    box.Text = placeholder
+    box.TextColor3 = THEME.SubText
+    box.Focused:Connect(function()
+        if box.Text == placeholder then
+            box.Text = ""
+            box.TextColor3 = THEME.Text
+        end
+    end)
+    box.FocusLost:Connect(function()
+        if box.Text == "" then
+            box.Text = placeholder
+            box.TextColor3 = THEME.SubText
+        end
+    end)
+end
+
+local CustomWordsFrame = Instance.new("Frame", ScreenGui)
+CustomWordsFrame.Name = "CustomWordsFrame"
+CustomWordsFrame.Size = UDim2.new(0, 250, 0, 350)
+CustomWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
+CustomWordsFrame.BackgroundColor3 = THEME.Background
+CustomWordsFrame.Visible = false
+CustomWordsFrame.ClipsDescendants = true
+EnableDragging(CustomWordsFrame)
+Instance.new("UICorner", CustomWordsFrame).CornerRadius = UDim.new(0, 8)
+local CWStroke = Instance.new("UIStroke", CustomWordsFrame)
+CWStroke.Color = THEME.Accent
+CWStroke.Transparency = 0.5
+CWStroke.Thickness = 2
+
+local CWHeader = Instance.new("TextLabel", CustomWordsFrame)
+CWHeader.Text = "Custom Words Manager"
+CWHeader.Font = Enum.Font.GothamBold
+CWHeader.TextSize = 14
+CWHeader.TextColor3 = THEME.Text
+CWHeader.Size = UDim2.new(1, 0, 0, 35)
+CWHeader.BackgroundTransparency = 1
+
+local CWCloseBtn = Instance.new("TextButton", CustomWordsFrame)
+CWCloseBtn.Text = "X"
+CWCloseBtn.Font = Enum.Font.GothamBold
+CWCloseBtn.TextSize = 14
+CWCloseBtn.TextColor3 = THEME.Error
+CWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+CWCloseBtn.BackgroundTransparency = 1
+CWCloseBtn.MouseButton1Click:Connect(function() CustomWordsFrame.Visible = false end)
+
+ManageWordsBtn.MouseButton1Click:Connect(function()
+    CustomWordsFrame.Visible = not CustomWordsFrame.Visible
+    CustomWordsFrame.Parent = nil
+    CustomWordsFrame.Parent = ScreenGui
+end)
+
+local CWSearchBox = Instance.new("TextBox", CustomWordsFrame)
+CWSearchBox.Font = Enum.Font.Gotham
+CWSearchBox.TextSize = 12
+CWSearchBox.BackgroundColor3 = THEME.ItemBG
+CWSearchBox.Size = UDim2.new(1, -20, 0, 24)
+CWSearchBox.Position = UDim2.new(0, 10, 0, 35)
+Instance.new("UICorner", CWSearchBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(CWSearchBox, "Search words...")
+
+local CWScroll = Instance.new("ScrollingFrame", CustomWordsFrame)
+CWScroll.Size = UDim2.new(1, -10, 1, -110)
+CWScroll.Position = UDim2.new(0, 5, 0, 65)
+CWScroll.BackgroundTransparency = 1
+CWScroll.ScrollBarThickness = 2
+CWScroll.ScrollBarImageColor3 = THEME.Accent
+CWScroll.CanvasSize = UDim2.new(0,0,0,0)
+local CWListLayout = Instance.new("UIListLayout", CWScroll)
+CWListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CWListLayout.Padding = UDim.new(0, 2)
+
+local CWAddBox = Instance.new("TextBox", CustomWordsFrame)
+CWAddBox.Font = Enum.Font.Gotham
+CWAddBox.TextSize = 12
+CWAddBox.BackgroundColor3 = THEME.ItemBG
+CWAddBox.Size = UDim2.new(0, 170, 0, 24)
+CWAddBox.Position = UDim2.new(0, 10, 1, -35)
+Instance.new("UICorner", CWAddBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(CWAddBox, "Add new word...")
+
+local CWAddBtn = Instance.new("TextButton", CustomWordsFrame)
+CWAddBtn.Text = "Add"
+CWAddBtn.Font = Enum.Font.GothamBold
+CWAddBtn.TextSize = 11
+CWAddBtn.TextColor3 = THEME.Success
+CWAddBtn.BackgroundColor3 = THEME.ItemBG
+CWAddBtn.Size = UDim2.new(0, 50, 0, 24)
+CWAddBtn.Position = UDim2.new(1, -60, 1, -35)
+Instance.new("UICorner", CWAddBtn).CornerRadius = UDim.new(0, 4)
+
+local function RefreshCustomWords()
+    for _, c in ipairs(CWScroll:GetChildren()) do if c:IsA("Frame") or c:IsA("TextButton") then c:Destroy() end end
+    local query = (CWSearchBox.Text == "Search words...") and "" or CWSearchBox.Text:lower():gsub("[%s%c]+", "")
+    local list = Config.CustomWords or {}
+    local count = 0
+    for i, w in ipairs(list) do
+        if query == "" or w:find(query, 1, true) then
+            count = count + 1
+            local row = Instance.new("TextButton", CWScroll)
+            row.Size = UDim2.new(1, -6, 0, 22)
+            row.BackgroundColor3 = (count % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+            row.Text = ""
+            row.AutoButtonColor = false
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            row.MouseButton1Click:Connect(function()
+                SmartType(w, lastDetected, true, true)
+                Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
+                task.delay(0.2, function()
+                     Tween(row, {BackgroundColor3 = (count % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+                end)
+            end)
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Text = w
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 12
+            lbl.TextColor3 = THEME.Text
+            lbl.Size = UDim2.new(1, -30, 1, 0)
+            lbl.Position = UDim2.new(0, 5, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            local del = Instance.new("TextButton", row)
+            del.Text = "X"
+            del.Font = Enum.Font.GothamBold
+            del.TextSize = 11
+            del.TextColor3 = THEME.Error
+            del.Size = UDim2.new(0, 22, 1, 0)
+            del.Position = UDim2.new(1, -22, 0, 0)
+            del.BackgroundTransparency = 1
+            del.MouseButton1Click:Connect(function()
+                table.remove(Config.CustomWords, i)
+                SaveConfig()
+                RefreshCustomWords()
+            end)
+        end
+    end
+    CWScroll.CanvasSize = UDim2.new(0, 0, 0, count * 24)
+end
+CWSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshCustomWords)
+CWAddBtn.MouseButton1Click:Connect(function()
+    local text = CWAddBox.Text
+    if text == "Add new word..." then return end
+    text = text:gsub("[%s%c]+", ""):lower()
+    if #text < 2 then return end
+    if not Config.CustomWords then Config.CustomWords = {} end
+    for _, w in ipairs(Config.CustomWords) do if w == text then return end end
+    table.insert(Config.CustomWords, text)
+    SaveConfig()
+    table.insert(Words, text)
+    local c = text:sub(1,1)
+    if Buckets and Buckets[c] then table.insert(Buckets[c], text) end
+    CWAddBox.Text = ""
+    RefreshCustomWords()
+end)
+RefreshCustomWords()
+
+local WordBrowserFrame = Instance.new("Frame", ScreenGui)
+WordBrowserFrame.Name = "WordBrowser"
+WordBrowserFrame.Size = UDim2.new(0, 300, 0, 400)
+WordBrowserFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
+WordBrowserFrame.BackgroundColor3 = THEME.Background
+WordBrowserFrame.Visible = false
+WordBrowserFrame.ClipsDescendants = true
+EnableDragging(WordBrowserFrame)
+Instance.new("UICorner", WordBrowserFrame).CornerRadius = UDim.new(0, 8)
+local WBStroke = Instance.new("UIStroke", WordBrowserFrame)
+WBStroke.Color = THEME.Accent
+WBStroke.Transparency = 0.5
+WBStroke.Thickness = 2
+
+local WBHeader = Instance.new("TextLabel", WordBrowserFrame)
+WBHeader.Text = "Word Browser"
+WBHeader.Font = Enum.Font.GothamBold
+WBHeader.TextSize = 16
+WBHeader.TextColor3 = THEME.Text
+WBHeader.Size = UDim2.new(1, 0, 0, 40)
+WBHeader.BackgroundTransparency = 1
+
+local WBClose = Instance.new("TextButton", WordBrowserFrame)
+WBClose.Text = "X"
+WBClose.Font = Enum.Font.GothamBold
+WBClose.TextSize = 16
+WBClose.TextColor3 = THEME.Error
+WBClose.Size = UDim2.new(0, 40, 0, 40)
+WBClose.Position = UDim2.new(1, -40, 0, 0)
+WBClose.BackgroundTransparency = 1
+WBClose.MouseButton1Click:Connect(function() WordBrowserFrame.Visible = false end)
+
+local WBStartBox = Instance.new("TextBox", WordBrowserFrame)
+WBStartBox.Font = Enum.Font.Gotham
+WBStartBox.TextSize = 12
+WBStartBox.BackgroundColor3 = THEME.ItemBG
+WBStartBox.Size = UDim2.new(0.4, 0, 0, 24)
+WBStartBox.Position = UDim2.new(0, 10, 0, 45)
+Instance.new("UICorner", WBStartBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(WBStartBox, "Starts with...")
+
+local WBEndBox = Instance.new("TextBox", WordBrowserFrame)
+WBEndBox.Font = Enum.Font.Gotham
+WBEndBox.TextSize = 12
+WBEndBox.BackgroundColor3 = THEME.ItemBG
+WBEndBox.Size = UDim2.new(0.4, 0, 0, 24)
+WBEndBox.Position = UDim2.new(0.45, 0, 0, 45)
+Instance.new("UICorner", WBEndBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(WBEndBox, "Ends with...")
+
+local WBLengthBox = Instance.new("TextBox", WordBrowserFrame)
+WBLengthBox.Font = Enum.Font.Gotham
+WBLengthBox.TextSize = 12
+WBLengthBox.BackgroundColor3 = THEME.ItemBG
+WBLengthBox.Size = UDim2.new(0.2, 0, 0, 24)
+WBLengthBox.Position = UDim2.new(0.02, 0, 0, 80)
+Instance.new("UICorner", WBLengthBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(WBLengthBox, "Len...")
+
+local WBSearchBtn = Instance.new("TextButton", WordBrowserFrame)
+WBSearchBtn.Text = "Go"
+WBSearchBtn.Font = Enum.Font.GothamBold
+WBSearchBtn.TextSize = 12
+WBSearchBtn.BackgroundColor3 = THEME.Accent
+WBSearchBtn.Size = UDim2.new(0.1, 0, 0, 24)
+WBSearchBtn.Position = UDim2.new(0.88, 0, 0, 45)
+Instance.new("UICorner", WBSearchBtn).CornerRadius = UDim.new(0, 4)
+
+local WBList = Instance.new("ScrollingFrame", WordBrowserFrame)
+WBList.Size = UDim2.new(1, -20, 1, -125)
+WBList.Position = UDim2.new(0, 10, 0, 115)
+WBList.BackgroundTransparency = 1
+WBList.ScrollBarThickness = 3
+WBList.ScrollBarImageColor3 = THEME.Accent
+WBList.CanvasSize = UDim2.new(0,0,0,0)
+local WBLayout = Instance.new("UIListLayout", WBList)
+WBLayout.Padding = UDim.new(0, 2)
+WBLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function SearchWords()
+    for _, c in ipairs(WBList:GetChildren()) do if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end end
+    local sVal = WBStartBox.Text
+    local eVal = WBEndBox.Text
+    local lVal = tonumber(WBLengthBox.Text)
+    if sVal == "Starts with..." then sVal = "" end
+    if eVal == "Ends with..." then eVal = "" end
+    sVal = sVal:lower():gsub("[%s%c]+", "")
+    eVal = eVal:lower():gsub("[%s%c]+", "")
+    suffixMode = eVal
+    Config.SuffixMode = eVal
+    lengthMode = lVal or 0
+    Config.LengthMode = lengthMode
+    if UpdateList then UpdateList(lastDetected, logRequiredLetters) end
+    if sVal == "" and eVal == "" and not lVal then return end
+    local results = {}
+    local bucket = Words
+    if sVal ~= "" then
+        local c = sVal:sub(1,1)
+        if Buckets and Buckets[c] then bucket = Buckets[c] end
+    end
+    for _, w in ipairs(bucket) do
+        local matchStart = (sVal == "") or (w:sub(1, #sVal) == sVal)
+        local matchEnd = (eVal == "") or (w:sub(-#eVal) == eVal)
+        local matchLen = (not lVal) or (#w == lVal)
+        if matchStart and matchEnd and matchLen then
+            table.insert(results, w)
+            if #results >= 200 then break end
+        end
+    end
+    for i, w in ipairs(results) do
+        local row = Instance.new("TextButton", WBList)
+        row.Size = UDim2.new(1, -6, 0, 22)
+        row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+        row.Text = ""
+        row.AutoButtonColor = false
+        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+        row.MouseButton1Click:Connect(function()
+            SmartType(w, lastDetected, true, true)
+            Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
+            task.delay(0.2, function()
+                 Tween(row, {BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+            end)
+        end)
+        local lbl = Instance.new("TextLabel", row)
+        lbl.Text = w
+        lbl.Font = Enum.Font.Gotham
+        lbl.TextSize = 12
+        lbl.TextColor3 = THEME.Text
+        lbl.Size = UDim2.new(1, -10, 1, 0)
+        lbl.Position = UDim2.new(0, 5, 0, 0)
+        lbl.BackgroundTransparency = 1
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+    end
+    WBList.CanvasSize = UDim2.new(0,0,0, WBLayout.AbsoluteContentSize.Y)
+end
+WBSearchBtn.MouseButton1Click:Connect(SearchWords)
+WordBrowserBtn.MouseButton1Click:Connect(function()
+    WordBrowserFrame.Visible = not WordBrowserFrame.Visible
+    WordBrowserFrame.Parent = nil
+    WordBrowserFrame.Parent = ScreenGui
 end)
 
 -- === TYPING LOGIC ===
