@@ -40,11 +40,11 @@ local function ColorToRGB(c)
 end
 
 local ConfigFile = "WordHelper_Config.json"
-local BlacklistFile = "blacklist.txt" -- File penyimpanan blacklist
+local BlacklistFile = "WordHelper_Blacklist.json" -- [MODIFIED] Menggunakan JSON
 
 local Config = {
     CPM = 550,
-    BlatantMode = "Off", -- Modified to string state: "Off", "On", "Auto"
+    BlatantMode = "Off",
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -79,7 +79,6 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
-            -- Migration from legacy boolean
             if decoded.Blatant ~= nil then
                 Config.BlatantMode = decoded.Blatant and "On" or "Off"
             end
@@ -89,28 +88,41 @@ local function LoadConfig()
 end
 LoadConfig()
 
--- === SYSTEM BLACKLIST PERSISTENT ===
+-- === SYSTEM BLACKLIST (JSON BASED) ===
 local Blacklist = {}
 
-local function LoadBlacklist()
-    if isfile and isfile(BlacklistFile) then
-        local content = readfile(BlacklistFile)
-        for w in content:gmatch("[^\r\n]+") do
-            local clean = w:gsub("[%s%c]+", ""):lower()
-            if #clean > 0 then
-                Blacklist[clean] = true
-            end
+local function SaveBlacklist()
+    if writefile then
+        -- Encode table ke JSON string
+        local success, encoded = pcall(function() return HttpService:JSONEncode(Blacklist) end)
+        if success then
+            writefile(BlacklistFile, encoded)
         end
     end
 end
 
-local function SaveFullBlacklist()
-    if writefile then
-        local content = ""
-        for word, _ in pairs(Blacklist) do
-            content = content .. word .. "\n"
+local function LoadBlacklist()
+    if isfile and isfile(BlacklistFile) then
+        local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(BlacklistFile)) end)
+        if success and decoded then
+            Blacklist = decoded
+        else
+            Blacklist = {}
         end
-        writefile(BlacklistFile, content)
+    else
+        -- Migrasi dari format lama (txt) jika json tidak ada
+        if isfile and isfile("blacklist.txt") then
+            local content = readfile("blacklist.txt")
+            for w in content:gmatch("[^\r\n]+") do
+                local clean = w:gsub("[%s%c]+", ""):lower()
+                if #clean > 0 then
+                    Blacklist[clean] = true
+                end
+            end
+            SaveBlacklist() -- Simpan sebagai json baru
+        else
+            Blacklist = {}
+        end
     end
 end
 
@@ -119,13 +131,16 @@ local function AddToBlacklist(word)
     word = word:lower()
     if not Blacklist[word] then
         Blacklist[word] = true
-        if appendfile and isfile(BlacklistFile) then
-            appendfile(BlacklistFile, "\n" .. word)
-        elseif writefile then
-            local content = ""
-            if isfile(BlacklistFile) then content = readfile(BlacklistFile) end
-            writefile(BlacklistFile, content .. "\n" .. word)
-        end
+        SaveBlacklist() -- Auto save setiap penambahan
+    end
+end
+
+local function RemoveFromBlacklist(word)
+    if not word then return end
+    word = word:lower()
+    if Blacklist[word] then
+        Blacklist[word] = nil
+        SaveBlacklist()
     end
 end
 
@@ -193,7 +208,6 @@ logConn = LogService.MessageOut:Connect(function(message, type)
     end
 end)
 
--- [1] UPDATED DICTIONARY URL
 local url = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
 local fileName = "ultimate_words_v4.txt"
 
@@ -239,7 +253,6 @@ local function UpdateStatus(text, color)
     game:GetService("RunService").RenderStepped:Wait()
 end
 
--- Startup: Always fetch fresh word list
 local function FetchWords()
     UpdateStatus("Fetching latest word list...", THEME.Warning)
     local success, res = pcall(function()
@@ -1755,7 +1768,7 @@ do
     end)
 end
 
--- === BLACKLIST UI IMPLEMENTATION ===
+-- === BLACKLIST UI IMPLEMENTATION (UPDATED FOR JSON & TABLE) ===
 local BlacklistFrame = Instance.new("Frame", ScreenGui)
 BlacklistFrame.Name = "BlacklistManager"
 BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
@@ -1863,8 +1876,7 @@ local function RefreshBlacklistUI()
                 del.ZIndex = 204
                 
                 del.MouseButton1Click:Connect(function()
-                    Blacklist[w] = nil 
-                    if SaveFullBlacklist then SaveFullBlacklist() end
+                    RemoveFromBlacklist(w)
                     RefreshBlacklistUI()
                     if ShowToast then ShowToast("Un-blacklisted: " .. w, "success") end
                 end)
@@ -2155,7 +2167,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                -- Add to persistent blacklist
+                -- [FIX] Jangan langsung blacklist, cek apakah kata tersebut valid di kamus used
                 AddToBlacklist(targetWord)
                 RandomPriority[targetWord] = nil
                 
@@ -2188,6 +2200,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     Backspace(#current)
                 end
 
+                -- [FIX] Pastikan masuk ke UsedWords jika berhasil
                 UsedWords[targetWord] = true
                 isMyTurnLogDetected = false
                 task.wait(0.2)
@@ -2324,6 +2337,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     Backspace(#current)
                 end
 
+                -- [FIX] Pastikan masuk ke UsedWords jika berhasil
                 UsedWords[targetWord] = true
                 isMyTurnLogDetected = false
                 task.wait(0.2)
