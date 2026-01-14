@@ -1208,9 +1208,6 @@ BlacklistManagerBtn.Size = UDim2.new(0, 265, 0, 24)
 BlacklistManagerBtn.Position = UDim2.new(0, 15, 0, 235)
 Instance.new("UICorner", BlacklistManagerBtn).CornerRadius = UDim.new(0, 4)
 
--- [[ AWAL KODE TAMBAHAN ]] --
-
--- Helper untuk Textbox Placeholder (Diperlukan oleh Frame baru)
 local function SetupPhantomBox(box, placeholder)
     box.Text = placeholder
     box.TextColor3 = THEME.SubText
@@ -1230,9 +1227,7 @@ local function SetupPhantomBox(box, placeholder)
     end)
 end
 
--- =========================================================
--- 1. CUSTOM WORDS MANAGER (Referensi: Last Letter.txt)
--- =========================================================
+-- === CUSTOM WORDS MANAGER ===
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
 CustomWordsFrame.Size = UDim2.new(0, 250, 0, 350)
@@ -1264,12 +1259,6 @@ CWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
 CWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
 CWCloseBtn.BackgroundTransparency = 1
 CWCloseBtn.MouseButton1Click:Connect(function() CustomWordsFrame.Visible = false end)
-
-ManageWordsBtn.MouseButton1Click:Connect(function()
-    CustomWordsFrame.Visible = not CustomWordsFrame.Visible
-    CustomWordsFrame.Parent = nil
-    CustomWordsFrame.Parent = ScreenGui
-end)
 
 local CWSearchBox = Instance.new("TextBox", CustomWordsFrame)
 CWSearchBox.Font = Enum.Font.Gotham
@@ -1334,6 +1323,7 @@ local function RefreshCustomWords()
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
             
             row.MouseButton1Click:Connect(function()
+                SmartType(w, lastDetected, true, true)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
                      Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
@@ -1362,7 +1352,6 @@ local function RefreshCustomWords()
             del.MouseButton1Click:Connect(function()
                 table.remove(Config.CustomWords, i)
                 SaveConfig()
-                if Blacklist then Blacklist[w] = true end
                 RefreshCustomWords()
                 ShowToast("Removed: " .. w, "warning")
             end)
@@ -1405,7 +1394,7 @@ CWAddBtn.MouseButton1Click:Connect(function()
     table.insert(Config.CustomWords, text)
     SaveConfig()
     
-    if Words then table.insert(Words, text) end
+    table.insert(Words, text)
     if c == "" then c = "#" end
     Buckets[c] = Buckets[c] or {}
     table.insert(Buckets[c], text)
@@ -1416,11 +1405,127 @@ CWAddBtn.MouseButton1Click:Connect(function()
     ShowToast("Added custom word: " .. text, "success")
 end)
 
-RefreshCustomWords()
+ManageWordsBtn.MouseButton1Click:Connect(function()
+    CustomWordsFrame.Visible = not CustomWordsFrame.Visible
+    if CustomWordsFrame.Visible then RefreshCustomWords() end
+end)
 
--- =========================================================
--- 2. SERVER BROWSER (Referensi: Last Letter.txt)
--- =========================================================
+-- === BLACKLIST MANAGER ===
+local BlacklistFrame = Instance.new("Frame", ScreenGui)
+BlacklistFrame.Name = "BlacklistFrame"
+BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
+BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175)
+BlacklistFrame.BackgroundColor3 = THEME.Background
+BlacklistFrame.Visible = false
+BlacklistFrame.ClipsDescendants = true
+EnableDragging(BlacklistFrame)
+Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
+local BLStroke = Instance.new("UIStroke", BlacklistFrame)
+BLStroke.Color = Color3.fromRGB(255, 80, 80)
+BLStroke.Transparency = 0.5
+BLStroke.Thickness = 2
+
+local BLHeader = Instance.new("TextLabel", BlacklistFrame)
+BLHeader.Text = "Blacklist Manager"
+BLHeader.Font = Enum.Font.GothamBold
+BLHeader.TextSize = 14
+BLHeader.TextColor3 = THEME.Text
+BLHeader.Size = UDim2.new(1, 0, 0, 35)
+BLHeader.BackgroundTransparency = 1
+
+local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
+BLCloseBtn.Text = "X"
+BLCloseBtn.Font = Enum.Font.GothamBold
+BLCloseBtn.TextSize = 14
+BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+BLCloseBtn.BackgroundTransparency = 1
+BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
+
+local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
+BLSearchBox.Font = Enum.Font.Gotham
+BLSearchBox.TextSize = 12
+BLSearchBox.BackgroundColor3 = THEME.ItemBG
+BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
+BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
+BLSearchBox.TextColor3 = THEME.Text
+Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(BLSearchBox, "Search blacklist...")
+
+local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
+BLScroll.Size = UDim2.new(1, -10, 1, -70)
+BLScroll.Position = UDim2.new(0, 5, 0, 65)
+BLScroll.BackgroundTransparency = 1
+BLScroll.ScrollBarThickness = 2
+BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
+BLScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local BLListLayout = Instance.new("UIListLayout", BLScroll)
+BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BLListLayout.Padding = UDim.new(0, 2)
+
+local function RefreshBlacklist()
+    for _, c in ipairs(BLScroll:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
+    local queryRaw = BLSearchBox.Text
+    local query = (queryRaw == "Search blacklist...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
+    
+    local sortedList = {}
+    for k, v in pairs(Blacklist) do
+        table.insert(sortedList, k)
+    end
+    table.sort(sortedList)
+    
+    local shownCount = 0
+    for _, w in ipairs(sortedList) do
+        if query == "" or w:find(query, 1, true) then
+            shownCount = shownCount + 1
+            local row = Instance.new("Frame", BLScroll)
+            row.Size = UDim2.new(1, -6, 0, 22)
+            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Text = w
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 12
+            lbl.TextColor3 = THEME.Text
+            lbl.Size = UDim2.new(1, -30, 1, 0)
+            lbl.Position = UDim2.new(0, 5, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local del = Instance.new("TextButton", row)
+            del.Text = "X"
+            del.Font = Enum.Font.GothamBold
+            del.TextSize = 11
+            del.TextColor3 = Color3.fromRGB(255, 80, 80)
+            del.Size = UDim2.new(0, 22, 1, 0)
+            del.Position = UDim2.new(1, -22, 0, 0)
+            del.BackgroundTransparency = 1
+            
+            del.MouseButton1Click:Connect(function()
+                Blacklist[w] = nil
+                SaveBlacklist()
+                RefreshBlacklist()
+                ShowToast("Removed from blacklist: " .. w, "success")
+            end)
+        end
+    end
+    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+end
+
+BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklist)
+BlacklistManagerBtn.MouseButton1Click:Connect(function()
+    BlacklistFrame.Visible = not BlacklistFrame.Visible
+    if BlacklistFrame.Visible then RefreshBlacklist() end
+end)
+
+-- === SERVER BROWSER ===
 local ServerFrame = Instance.new("Frame", ScreenGui)
 ServerFrame.Name = "ServerBrowser"
 ServerFrame.Size = UDim2.new(0, 350, 0, 400)
@@ -1487,7 +1592,6 @@ Instance.new("UICorner", SBRefresh).CornerRadius = UDim.new(0, 6)
 
 local function FetchServers()
     SBRefresh.Text = "..."
-    
     for _, c in ipairs(SBList:GetChildren()) do
         if c:IsA("Frame") then c:Destroy() end
     end
@@ -1504,7 +1608,6 @@ local function FetchServers()
             local data = HttpService:JSONDecode(result.Body)
             if data and data.data then
                 local servers = data.data
-                
                 if ServerSortMode == "Smallest" then
                     table.sort(servers, function(a,b) return (a.playing or 0) < (b.playing or 0) end)
                 else
@@ -1541,27 +1644,14 @@ local function FetchServers()
                         join.MouseButton1Click:Connect(function()
                             join.Text = "Joining..."
                             ShowToast("Teleporting...", "success")
-                            
-                            -- Menggunakan script saat ini untuk queue_on_teleport
-                            if queue_on_teleport then
-                                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/newlua.txt"))()')
+                            if game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, srv.id, Players.LocalPlayer) == false then
+                                join.Text = "Failed"
+                                task.wait(2)
+                                join.Text = "Join"
                             end
-
-                            task.spawn(function()
-                                local success, err = pcall(function()
-                                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, srv.id, Players.LocalPlayer)
-                                end)
-                                if not success then
-                                    join.Text = "Failed"
-                                    ShowToast("Teleport Failed: " .. tostring(err), "error")
-                                    task.wait(2)
-                                    join.Text = "Join"
-                                end
-                            end)
                         end)
                     end
                 end
-                
                 SBList.CanvasSize = UDim2.new(0,0,0, SBLayout.AbsoluteContentSize.Y)
             end
         else
@@ -1572,11 +1662,7 @@ local function FetchServers()
 end
 
 SBSortBtn.MouseButton1Click:Connect(function()
-    if ServerSortMode == "Smallest" then
-        ServerSortMode = "Largest"
-    else
-        ServerSortMode = "Smallest"
-    end
+    ServerSortMode = (ServerSortMode == "Smallest") and "Largest" or "Smallest"
     SBSortBtn.Text = "Sort: " .. ServerSortMode
     FetchServers()
 end)
@@ -1585,17 +1671,10 @@ SBRefresh.MouseButton1Click:Connect(FetchServers)
 
 ServerBrowserBtn.MouseButton1Click:Connect(function()
     ServerFrame.Visible = not ServerFrame.Visible
-    ServerFrame.Parent = nil
-    ServerFrame.Parent = ScreenGui
-    
-    if ServerFrame.Visible then
-        FetchServers()
-    end
+    if ServerFrame.Visible then FetchServers() end
 end)
 
--- =========================================================
--- 3. WORD BROWSER (Referensi: Last Letter.txt)
--- =========================================================
+-- === WORD BROWSER ===
 local WordBrowserFrame = Instance.new("Frame", ScreenGui)
 WordBrowserFrame.Name = "WordBrowser"
 WordBrowserFrame.Size = UDim2.new(0, 300, 0, 400)
@@ -1681,216 +1760,41 @@ local function SearchWords()
         if c:IsA("GuiObject") and c.Name ~= "UIListLayout" then c:Destroy() end
     end
     
-    local sVal = WBStartBox.Text
-    local eVal = WBEndBox.Text
+    local sVal = (WBStartBox.Text == "Starts with...") and "" or WBStartBox.Text:lower():gsub("[%s%c]+", "")
+    local eVal = (WBEndBox.Text == "Ends with...") and "" or WBEndBox.Text:lower():gsub("[%s%c]+", "")
     local lVal = tonumber(WBLengthBox.Text)
     
-    if sVal == "Starts with..." then sVal = "" end
-    if eVal == "Ends with..." then eVal = "" end
-    
-    sVal = sVal:lower():gsub("[%s%c]+", "")
-    eVal = eVal:lower():gsub("[%s%c]+", "")
-    
-    -- Sync dengan logic utama
-    suffixMode = eVal
-    Config.SuffixMode = eVal
-    lengthMode = lVal or 0
-    Config.LengthMode = lengthMode
-    
-    -- Trigger main list update jika perlu
-    if UpdateList then
-        UpdateList(lastDetected, lastRequiredLetter)
-    end
-    
-    if sVal == "" and eVal == "" and not lVal then return end
-    
-    local results = {}
-    local limit = 200
-    
-    local bucket = Words
-    if sVal ~= "" then
-        local c = sVal:sub(1,1)
-        if Buckets and Buckets[c] then
-            bucket = Buckets[c]
-        end
-    end
-    
+    local matches = {}
+    local bucket = (sVal ~= "" and Buckets and Buckets[sVal:sub(1,1)]) or Words
     for _, w in ipairs(bucket) do
-        local matchStart = (sVal == "") or (w:sub(1, #sVal) == sVal)
-        local matchEnd = (eVal == "") or (w:sub(-#eVal) == eVal)
-        local matchLen = (not lVal) or (#w == lVal)
-        
-        if matchStart and matchEnd and matchLen then
-            table.insert(results, w)
-            if #results >= limit then break end
+        if (sVal == "" or w:sub(1, #sVal) == sVal) and (eVal == "" or w:sub(-#eVal) == eVal) and (not lVal or #w == lVal) then
+            if not Blacklist[w] and not UsedWords[w] then
+                table.insert(matches, w)
+                if #matches >= 200 then break end
+            end
         end
     end
     
-    for i, w in ipairs(results) do
+    for i, w in ipairs(matches) do
         local row = Instance.new("TextButton", WBList)
         row.Size = UDim2.new(1, -6, 0, 22)
         row.BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
-        row.Text = ""
-        row.AutoButtonColor = false
+        row.Text = " " .. w
+        row.Font = Enum.Font.Gotham
+        row.TextSize = 12
+        row.TextColor3 = THEME.Text
+        row.TextXAlignment = Enum.TextXAlignment.Left
         Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-        
-        row.MouseButton1Click:Connect(function()
-            if SmartType then SmartType(w, lastDetected, true, true) end
-            Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
-            task.delay(0.2, function()
-                 Tween(row, {BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
-            end)
-        end)
-        
-        local lbl = Instance.new("TextLabel", row)
-        lbl.Text = w
-        lbl.Font = Enum.Font.Gotham
-        lbl.TextSize = 12
-        lbl.TextColor3 = THEME.Text
-        lbl.Size = UDim2.new(1, -10, 1, 0)
-        lbl.Position = UDim2.new(0, 5, 0, 0)
-        lbl.BackgroundTransparency = 1
-        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        row.MouseButton1Click:Connect(function() SmartType(w, lastDetected, true, true) end)
     end
-    
-    WBList.CanvasSize = UDim2.new(0,0,0, WBLayout.AbsoluteContentSize.Y)
+    WBList.CanvasSize = UDim2.new(0, 0, 0, WBLayout.AbsoluteContentSize.Y)
 end
 
 WBSearchBtn.MouseButton1Click:Connect(SearchWords)
-WBStartBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
-WBEndBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
-WBLengthBox.FocusLost:Connect(function(enter) if enter then SearchWords() end end)
-
-WordBrowserBtn.MouseButton1Click:Connect(function()
-    WordBrowserFrame.Visible = not WordBrowserFrame.Visible
-    WordBrowserFrame.Parent = nil
-    WordBrowserFrame.Parent = ScreenGui
-end)
-
--- =========================================================
--- 4. BLACKLIST MANAGER (Referensi: pakai.txt)
--- =========================================================
-local BlacklistFrame = Instance.new("Frame", ScreenGui)
-BlacklistFrame.Name = "BlacklistFrame"
-BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
-BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175)
-BlacklistFrame.BackgroundColor3 = THEME.Background
-BlacklistFrame.Visible = false
-BlacklistFrame.ClipsDescendants = true
-EnableDragging(BlacklistFrame)
-Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
-local BLStroke = Instance.new("UIStroke", BlacklistFrame)
-BLStroke.Color = Color3.fromRGB(255, 80, 80)
-BLStroke.Transparency = 0.5
-BLStroke.Thickness = 2
-
-local BLHeader = Instance.new("TextLabel", BlacklistFrame)
-BLHeader.Text = "Blacklist Manager"
-BLHeader.Font = Enum.Font.GothamBold
-BLHeader.TextSize = 14
-BLHeader.TextColor3 = THEME.Text
-BLHeader.Size = UDim2.new(1, 0, 0, 35)
-BLHeader.BackgroundTransparency = 1
-
-local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
-BLCloseBtn.Text = "X"
-BLCloseBtn.Font = Enum.Font.GothamBold
-BLCloseBtn.TextSize = 14
-BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
-BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
-BLCloseBtn.BackgroundTransparency = 1
-BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
-
-local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
-BLSearchBox.Font = Enum.Font.Gotham
-BLSearchBox.TextSize = 12
-BLSearchBox.BackgroundColor3 = THEME.ItemBG
-BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
-BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
-BLSearchBox.TextColor3 = THEME.Text
-Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
-SetupPhantomBox(BLSearchBox, "Search blacklist...")
-
-local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
-BLScroll.Size = UDim2.new(1, -10, 1, -70)
-BLScroll.Position = UDim2.new(0, 5, 0, 65)
-BLScroll.BackgroundTransparency = 1
-BLScroll.ScrollBarThickness = 2
-BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
-BLScroll.CanvasSize = UDim2.new(0,0,0,0)
-
-local BLListLayout = Instance.new("UIListLayout", BLScroll)
-BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-BLListLayout.Padding = UDim.new(0, 2)
-
-local function RefreshBlacklist()
-    for _, c in ipairs(BLScroll:GetChildren()) do
-        if c:IsA("Frame") then c:Destroy() end
-    end
-    
-    local queryRaw = BLSearchBox.Text
-    local query = (queryRaw == "Search blacklist...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
-    
-    local sortedList = {}
-    if Blacklist then
-        for k, v in pairs(Blacklist) do
-            table.insert(sortedList, k)
-        end
-        table.sort(sortedList)
-    end
-    
-    local shownCount = 0
-    for _, w in ipairs(sortedList) do
-        if query == "" or w:find(query, 1, true) then
-            shownCount = shownCount + 1
-            local row = Instance.new("Frame", BLScroll)
-            row.Size = UDim2.new(1, -6, 0, 22)
-            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
-            row.BorderSizePixel = 0
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-            
-            local lbl = Instance.new("TextLabel", row)
-            lbl.Text = w
-            lbl.Font = Enum.Font.Gotham
-            lbl.TextSize = 12
-            lbl.TextColor3 = THEME.Text
-            lbl.Size = UDim2.new(1, -30, 1, 0)
-            lbl.Position = UDim2.new(0, 5, 0, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            
-            local del = Instance.new("TextButton", row)
-            del.Text = "X"
-            del.Font = Enum.Font.GothamBold
-            del.TextSize = 11
-            del.TextColor3 = Color3.fromRGB(255, 80, 80)
-            del.Size = UDim2.new(0, 22, 1, 0)
-            del.Position = UDim2.new(1, -22, 0, 0)
-            del.BackgroundTransparency = 1
-            
-            del.MouseButton1Click:Connect(function()
-                if Blacklist then Blacklist[w] = nil end
-                SaveBlacklist()
-                RefreshBlacklist()
-                ShowToast("Removed from blacklist: " .. w, "success")
-            end)
-        end
-    end
-    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
-end
-
-BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklist)
-BlacklistManagerBtn.MouseButton1Click:Connect(function()
-    BlacklistFrame.Visible = not BlacklistFrame.Visible
-    BlacklistFrame.Parent = nil
-    BlacklistFrame.Parent = ScreenGui
-    if BlacklistFrame.Visible then RefreshBlacklist() end
-end)
-
--- [[ AKHIR KODE TAMBAHAN ]] --
+WordBrowserBtn.MouseButton1Click:Connect(function() WordBrowserFrame.Visible = not WordBrowserFrame.Visible end)
 
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
+
     local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
