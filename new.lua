@@ -60,7 +60,6 @@ local Config = {
 	KeyboardLayout = "QWERTY"
 }
 
--- === SYSTEM BLACKLIST & CACHE ===
 local Blacklist = {}
 local UsedWords = {}
 local function SaveBlacklist()
