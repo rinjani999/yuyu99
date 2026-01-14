@@ -71,7 +71,6 @@ local Config = {
 }
 
 -- === SYSTEM CACHE (Session Only) ===
--- UsedWords berfungsi sebagai cache sementara dan session-blacklist
 local UsedWords = {} 
 
 local function SaveConfig()
@@ -85,7 +84,6 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
-            -- Default values for new sliders
             if not Config.PanicTrigger then Config.PanicTrigger = 10 end
             if not Config.AutoBlatantTrigger then Config.AutoBlatantTrigger = 7 end
         end
@@ -143,7 +141,7 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
-local lastFrameVisible = false -- Tracker untuk deteksi akhir ronde
+local lastFrameVisible = false 
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -201,7 +199,6 @@ local function UpdateStatus(text, color)
     game:GetService("RunService").RenderStepped:Wait()
 end
 
--- Startup: Always fetch fresh word list
 local function FetchWords()
     UpdateStatus("Fetching latest word list...", THEME.Warning)
     local success, res = pcall(function()
@@ -267,7 +264,6 @@ if Config.CustomWords then
     end
 end
 
--- Clear memory
 SeenWords = nil
 
 local function shuffleTable(t)
@@ -363,7 +359,8 @@ local function GetTurnInfo(providedFrame)
     if typeLbl and typeLbl:IsA("TextLabel") then
         local text = typeLbl.Text
         local player = Players.LocalPlayer
-        if text:sub(1, #player.Name) == player.Name or text:sub(1, #player.DisplayName) == player.DisplayName then
+        -- IMPROVED: Using find instead of sub for more reliable detection
+        if text:find(player.Name, 1, true) or text:find(player.DisplayName, 1, true) then
             local char = text:match("starting with:%s*([A-Za-z])")
             return true, char
         end
@@ -371,7 +368,6 @@ local function GetTurnInfo(providedFrame)
     return false, nil
 end
 
--- === CRITICAL HELPER: GetRemainingTime ===
 local function GetRemainingTime()
     local player = Players.LocalPlayer
     local gui = player and player:FindFirstChild("PlayerGui")
@@ -1614,6 +1610,181 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 isMyTurnLogDetected = false
                 task.wait(0.2)
             end
+        else
+            -- LOGIKA UTAMA PENGETIKAN KATA BARU
+            local missingPart = ""
+            if targetWord:sub(1, #currentDetected) == currentDetected then
+                missingPart = targetWord:sub(#currentDetected + 1)
+            else
+                missingPart = targetWord
+            end
+
+            local letters = "abcdefghijklmnopqrstuvwxyz"
+            local panicModeActive = false -- Flag lokal untuk panic override
+            
+            for i = 1, #missingPart do
+                -- [LOGIKA 1: AUTO BLATANT RESET]
+                -- Jika trigger aktif (dari Loop Part 4), reset pengetikan
+                if needsBlatantReset then
+                    needsBlatantReset = false
+                    local focused = UserInputService:GetFocusedTextBox()
+                    if focused and focused:IsDescendantOf(game) and focused.TextEditable then
+                        local len = #focused.Text
+                        Backspace(len + 1) -- Hapus semua
+                        task.wait(0.1)
+                        isTyping = false 
+                        -- Panggil ulang SmartType secara rekursif dengan mode bypass
+                        return SmartType(targetWord, "", false, true)
+                    end
+                end
+
+                if not bypassTurn and not GetTurnInfo() then
+                     task.wait(0.05)
+                     if not GetTurnInfo() then break end
+                end
+
+                -- [LOGIKA 2: PANIC OVERRIDE]
+                -- Cek waktu, jika < PanicTrigger, abaikan error rate dan percepat
+                local timer = GetTimerSecondsHelper()
+                if timer and timer < Config.PanicTrigger and (useHumanization or errorRate > 0) then
+                    panicModeActive = true
+                end
+
+                local ch = missingPart:sub(i, i)
+                
+                -- Jika Panic Mode atau Blatant Mode aktif
+                if panicModeActive or isBlatant then
+                     SimulateKey(ch)
+                     task.wait(0.005) -- Delay minimal
+                else
+                    -- Normal Humanize Logic dengan Error Rate
+                    if errorRate > 0 and (math.random() < (errorRate / 100)) then
+                        local typoChar
+                        repeat
+                            local idx = math.random(1, #letters)
+                            typoChar = letters:sub(idx, idx)
+                        until typoChar ~= ch
+                        SimulateKey(typoChar)
+                        
+                        if riskyMistakes then
+                             task.wait(0.05 + math.random() * 0.1)
+                             PressEnter()
+                        end
+
+                        task.wait(CalculateDelayForKeys(lastKey, typoChar))
+                        lastKey = typoChar
+                        local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
+                        
+                        -- Cek timer lagi sebelum menunggu lama
+                        if GetTimerSecondsHelper() and GetTimerSecondsHelper() < Config.PanicTrigger then
+                             task.wait(0.05) -- Jangan menunggu jika waktu mepet
+                        else
+                             task.wait(realize)
+                        end
+                        
+                        SimulateKey(Enum.KeyCode.Backspace)
+                        lastKey = nil
+                        task.wait(0.05 + math.random() * 0.08)
+                        SimulateKey(ch)
+                        task.wait(CalculateDelayForKeys(lastKey, ch))
+                        lastKey = ch
+                    else
+                        SimulateKey(ch)
+                        task.wait(CalculateDelayForKeys(lastKey, ch))
+                        lastKey = ch
+                    end
+                    if useHumanization and math.random() < 0.03 then
+                        task.wait(0.12 + math.random() * 0.5)
+                    end
+                end
+            end
+
+            -- Pre-submission verify (Skip jika risky atau panic)
+            if not riskyMistakes and not panicModeActive then
+                task.wait(0.1)
+                local finalCheck = GetGameTextBox()
+                if finalCheck and finalCheck.Text ~= targetWord then
+                    StatusText.Text = "Typing mismatch detected!"
+                    StatusText.TextColor3 = THEME.Warning
+                    Backspace(#finalCheck.Text)
+                    
+                    isTyping = false
+                    forceUpdateList = true
+                    return
+                end
+            end
+
+            PressEnter()
+            
+            local verifyStart = tick()
+            local accepted = false
+            
+            while (tick() - verifyStart) < 1.5 do
+                local currentCheck = GetCurrentGameWord()
+                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
+                     accepted = true
+                     break
+                end
+                task.wait(0.05)
+            end
+
+            if not accepted then
+                
+                local postCheck = GetGameTextBox()
+                if postCheck and postCheck.Text == targetWord then
+                     StatusText.Text = "Enter failed? Retrying..."
+                     PressEnter()
+                     task.wait(0.5)
+                     if GetCurrentGameWord() == currentDetected then
+                         StatusText.Text = "Submission Failed (Lag?)"
+                         StatusText.TextColor3 = THEME.Warning
+                         Backspace(#targetWord)
+                         isTyping = false
+                         forceUpdateList = true
+                         return
+                     end
+                end
+
+                -- LOGIKA UTAMA: JIKA DITOLAK -> MASUK USEDWORDS (SESSION BLOCK)
+                if UsedWords[targetWord] then
+                     ShowToast("Already used (Race Condition)!", "warning")
+                else
+                     UsedWords[targetWord] = true
+                     ShowToast("Rejected (Session Block)", "warning")
+                end
+
+                for k, list in pairs(RandomOrderCache) do
+                    for i = #list, 1, -1 do if list[i] == targetWord then table.remove(list, i) end end
+                end
+                StatusText.Text = "Rejected: '" .. targetWord .. "'"
+                StatusText.TextColor3 = THEME.Warning
+                
+                local focused = UserInputService:GetFocusedTextBox()
+                if focused and focused:IsDescendantOf(game) and focused.TextEditable then
+                    focused.Text = ""
+                else
+                    Backspace(#targetWord + 5)
+                end
+                
+                isTyping = false
+                lastDetected = "---"
+                forceUpdateList = true
+
+                task.spawn(function()
+                    task.wait(0.1)
+                    local _, req = GetTurnInfo()
+                    UpdateList(currentDetected, req)
+                end)
+                return
+            else
+                StatusText.Text = "Word Cleared (Corrected)"
+                StatusText.TextColor3 = THEME.SubText
+                local current = GetCurrentGameWord()
+                if #current > 0 then Backspace(#current) end
+                UsedWords[targetWord] = true
+                isMyTurnLogDetected = false
+                task.wait(0.2)
+            end
         end
     end)
     isTyping = false
@@ -2117,181 +2288,10 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
 
-        -- Auto Join Logic
-        if autoJoin and (now - lastAutoJoinCheck > AUTO_JOIN_RATE) then
-            lastAutoJoinCheck = now
-            task.spawn(function()
-                local displayMatch = gui and gui:FindFirstChild("DisplayMatch")
-                local dFrame = displayMatch and displayMatch:FindFirstChild("Frame")
-                local matches = dFrame and dFrame:FindFirstChild("Matches")
-                
-                if matches then
-                    for _, matchFrame in ipairs(matches:GetChildren()) do
-                        if (matchFrame:IsA("Frame") or matchFrame:IsA("GuiObject")) and matchFrame.Name ~= "UIListLayout" then
-                            local joinBtn = matchFrame:FindFirstChild("Join")
-                            local title = matchFrame:FindFirstChild("Title")
-                            
-                            local isLastLetter = false
-                            local titleText = "N/A"
-                            if title and title:IsA("TextLabel") then
-                                titleText = title.Text
-                                if titleText:find("Last Letter") then
-                                    isLastLetter = true
-                                end
-                            end
-
-                            local idx = tonumber(matchFrame.Name)
-                            local allowed = true
-                            if idx then
-                                if idx >= 1 and idx <= 4 then allowed = Config.AutoJoinSettings._1v1
-                                elseif idx >= 5 and idx <= 8 then allowed = Config.AutoJoinSettings._4p
-                                elseif idx == 9 then allowed = Config.AutoJoinSettings._8p
-                                end
-                            end
-
-                            if joinBtn and joinBtn.Visible and isLastLetter and allowed then
-                                local matchId = matchFrame.Name
-                                if (tick() - (JoinDebounce[matchId] or 0)) > 2 then
-                                    JoinDebounce[matchId] = tick()
-                                    task.wait(0.5)
-                                    
-                                    local clicked = false
-                                    if getconnections then
-                                        if joinBtn:IsA("GuiButton") then
-                                            local success, conns = pcall(function() return getconnections(joinBtn.MouseButton1Click) end)
-                                            if success and conns then
-                                                for _, conn in ipairs(conns) do
-                                                    if conn.Fire then conn:Fire() end
-                                                    if conn.Function then
-                                                        task.spawn(conn.Function)
-                                                    end
-                                                    clicked = true
-                                                end
-                                            end
-                                        end
-                                    end
-                                    
-                                    if not clicked then
-                                        local cd = joinBtn:FindFirstChildWhichIsA("ClickDetector")
-                                        if cd then
-                                            fireclickdetector(cd)
-                                            clicked = true
-                                        end
-                                    end
-
-                                    if not clicked then
-                                        local absPos = joinBtn.AbsolutePosition
-                                        local absSize = joinBtn.AbsoluteSize
-                                        local centerX = absPos.X + absSize.X/2
-                                        local centerY = absPos.Y + absSize.Y/2
-                                        
-                                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-                                        task.wait(0.05)
-                                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-                                    end
-                                    break
-                                end
-                            end
-                        end
-                    end
-                end
-            end)
-        end
-
-        local typeLbl = frame and frame:FindFirstChild("Type")
-        local typeVisible = typeLbl and typeLbl.Visible
-        lastTypeVisible = typeVisible
-
-        if censored then
-            if StatusText.Text ~= "Word is Censored" then
-                StatusText.Text = "Word is Censored"
-                StatusText.TextColor3 = THEME.Warning
-                Tween(StatusDot, {BackgroundColor3 = THEME.Warning})
-                
-                for _, btn in ipairs(ButtonCache) do btn.Visible = false end
-                StatsData.Count.Text = "Words: 0"
-            end
-            
-            listUpdatePending = false
-            forceUpdateList = false
-            currentBestMatch = nil
-            lastDetected = detected
-            lastRequiredLetter = requiredLetter
-        end
-        
-        if listUpdatePending and (now - lastInputTime > LIST_DEBOUNCE) then
-            listUpdatePending = false
-            UpdateList(lastDetected, lastRequiredLetter)
-            
-            local visCount = 0
-            for _, b in ipairs(ButtonCache) do
-                if b.Visible then visCount = visCount + 1 end
-            end
-            StatsData.Count.Text = "Words: " .. visCount .. "+"
-        end
-
-        if not isVisible then
-            if StatusText.Text ~= "Round Ended - Words Cleared" and StatusText.Text ~= "Not in Round" then
-                StatusText.Text = "Not in Round"
-                StatusText.TextColor3 = THEME.SubText
-                Tween(StatusDot, {BackgroundColor3 = THEME.SubText})
-                for _, btn in ipairs(ButtonCache) do btn.Visible = false end
-                StatsData.Count.Text = "Words: 0"
-            end
-            lastDetected = "---"
-        elseif detected ~= lastDetected or requiredLetter ~= lastRequiredLetter or forceUpdateList then
-            currentBestMatch = nil
-            lastDetected = detected
-            lastRequiredLetter = requiredLetter
-            
-            if detected == "" and not forceUpdateList then
-                StatusText.Text = "Waiting..."
-                StatusText.TextColor3 = THEME.SubText
-                Tween(StatusDot, {BackgroundColor3 = THEME.SubText})
-                
-                UpdateList("", requiredLetter)
-                listUpdatePending = false
-                
-                local visCount = 0
-                for _, b in ipairs(ButtonCache) do
-                    if b.Visible then visCount = visCount + 1 end
-                end
-                StatsData.Count.Text = "Words: " .. visCount .. "+"
-            else
-                if detected ~= "" then
-                    local isCompleted = false
-                    if #detected > 2 then
-                        local c = detected:sub(1,1)
-                        if c ~= "#" and Buckets and Buckets[c] then
-                            for _, w in ipairs(Buckets[c]) do
-                                if w == detected then
-                                    isCompleted = true
-                                    break
-                                end
-                            end
-                        end
-                    end
-
-                    if isCompleted then
-                        StatusText.Text = "Completed: " .. detected .. " <font color=\"rgb(100,255,140)\">✓</font>"
-                        StatusText.TextColor3 = THEME.Success
-                        Tween(StatusDot, {BackgroundColor3 = THEME.Success})
-                    else
-                        StatusText.Text = "Input: " .. detected
-                        StatusText.TextColor3 = THEME.Accent
-                        Tween(StatusDot, {BackgroundColor3 = THEME.Warning})
-                    end
-                end
-                
-                if forceUpdateList then
-                    listUpdatePending = true
-                    lastInputTime = 0
-                    forceUpdateList = false
-                else
-                    listUpdatePending = true
-                    lastInputTime = now
-                end
-            end
+        -- FORCE AUTO UPDATE LIST (Fix for Auto Play stuck)
+        -- Jika giliran saya tapi list kosong/belum terupdate, paksa update
+        if autoPlay and isMyTurn and not currentBestMatch and not isTyping then
+             UpdateList(detected, requiredLetter)
         end
 
         -- Auto Play Logic
@@ -2307,8 +2307,9 @@ runConn = RunService.RenderStepped:Connect(function()
                     task.wait(delay)
                     
                     local stillMyTurn, _ = GetTurnInfo()
+                    -- Bypass Turn Check di SmartType agar tidak macet di tengah jalan
                     if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
-                         SmartType(targetWord, snapshotDetected, false)
+                         SmartType(targetWord, snapshotDetected, false, true)
                     end
                     isAutoPlayScheduled = false
                 end)
