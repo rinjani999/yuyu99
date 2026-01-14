@@ -1216,6 +1216,501 @@ BlacklistManagerBtn.Size = UDim2.new(0, 265, 0, 24)
 BlacklistManagerBtn.Position = UDim2.new(0, 15, 0, 235)
 Instance.new("UICorner", BlacklistManagerBtn).CornerRadius = UDim.new(0, 4)
 
+-- === CUSTOM WORDS UI ===
+local CustomWordsFrame = Instance.new("Frame", ScreenGui)
+CustomWordsFrame.Name = "CustomWordsFrame"
+CustomWordsFrame.Size = UDim2.new(0, 250, 0, 350)
+CustomWordsFrame.Position = UDim2.new(0.5, -125, 0.5, -175)
+CustomWordsFrame.BackgroundColor3 = THEME.Background
+CustomWordsFrame.Visible = false
+CustomWordsFrame.ClipsDescendants = true
+EnableDragging(CustomWordsFrame)
+Instance.new("UICorner", CustomWordsFrame).CornerRadius = UDim.new(0, 8)
+local CWStroke = Instance.new("UIStroke", CustomWordsFrame)
+CWStroke.Color = THEME.Accent
+CWStroke.Transparency = 0.5
+CWStroke.Thickness = 2
+
+local CWHeader = Instance.new("TextLabel", CustomWordsFrame)
+CWHeader.Text = "Custom Words Manager"
+CWHeader.Font = Enum.Font.GothamBold
+CWHeader.TextSize = 14
+CWHeader.TextColor3 = THEME.Text
+CWHeader.Size = UDim2.new(1, 0, 0, 35)
+CWHeader.BackgroundTransparency = 1
+
+local CWCloseBtn = Instance.new("TextButton", CustomWordsFrame)
+CWCloseBtn.Text = "X"
+CWCloseBtn.Font = Enum.Font.GothamBold
+CWCloseBtn.TextSize = 14
+CWCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+CWCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+CWCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+CWCloseBtn.BackgroundTransparency = 1
+CWCloseBtn.MouseButton1Click:Connect(function() CustomWordsFrame.Visible = false end)
+
+ManageWordsBtn.MouseButton1Click:Connect(function()
+    CustomWordsFrame.Visible = not CustomWordsFrame.Visible
+    CustomWordsFrame.Parent = nil
+    CustomWordsFrame.Parent = ScreenGui
+end)
+
+local function SetupPhantomBox(box, placeholder)
+    box.Text = placeholder
+    box.TextColor3 = THEME.SubText
+    
+    box.Focused:Connect(function()
+        if box.Text == placeholder then
+            box.Text = ""
+            box.TextColor3 = THEME.Text
+        end
+    end)
+    
+    box.FocusLost:Connect(function()
+        if box.Text == "" then
+            box.Text = placeholder
+            box.TextColor3 = THEME.SubText
+        end
+    end)
+end
+
+local CWSearchBox = Instance.new("TextBox", CustomWordsFrame)
+CWSearchBox.Font = Enum.Font.Gotham
+CWSearchBox.TextSize = 12
+CWSearchBox.BackgroundColor3 = THEME.ItemBG
+CWSearchBox.Size = UDim2.new(1, -20, 0, 24)
+CWSearchBox.Position = UDim2.new(0, 10, 0, 35)
+Instance.new("UICorner", CWSearchBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(CWSearchBox, "Search words...")
+
+local CWScroll = Instance.new("ScrollingFrame", CustomWordsFrame)
+CWScroll.Size = UDim2.new(1, -10, 1, -110)
+CWScroll.Position = UDim2.new(0, 5, 0, 65)
+CWScroll.BackgroundTransparency = 1
+CWScroll.ScrollBarThickness = 2
+CWScroll.ScrollBarImageColor3 = THEME.Accent
+CWScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local CWListLayout = Instance.new("UIListLayout", CWScroll)
+CWListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+CWListLayout.Padding = UDim.new(0, 2)
+
+local CWAddBox = Instance.new("TextBox", CustomWordsFrame)
+CWAddBox.Font = Enum.Font.Gotham
+CWAddBox.TextSize = 12
+CWAddBox.BackgroundColor3 = THEME.ItemBG
+CWAddBox.Size = UDim2.new(0, 170, 0, 24)
+CWAddBox.Position = UDim2.new(0, 10, 1, -35)
+Instance.new("UICorner", CWAddBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(CWAddBox, "Add new word...")
+
+local CWAddBtn = Instance.new("TextButton", CustomWordsFrame)
+CWAddBtn.Text = "Add"
+CWAddBtn.Font = Enum.Font.GothamBold
+CWAddBtn.TextSize = 11
+CWAddBtn.TextColor3 = THEME.Success
+CWAddBtn.BackgroundColor3 = THEME.ItemBG
+CWAddBtn.Size = UDim2.new(0, 50, 0, 24)
+CWAddBtn.Position = UDim2.new(1, -60, 1, -35)
+Instance.new("UICorner", CWAddBtn).CornerRadius = UDim.new(0, 4)
+
+local function RefreshCustomWords()
+    for _, c in ipairs(CWScroll:GetChildren()) do
+        if c:IsA("Frame") or c:IsA("TextButton") then c:Destroy() end
+    end
+    
+    local queryRaw = CWSearchBox.Text
+    local query = (queryRaw == "Search words...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
+    
+    local list = Config.CustomWords or {}
+    local shownCount = 0
+    
+    for i, w in ipairs(list) do
+        if query == "" or w:find(query, 1, true) then
+            shownCount = shownCount + 1
+            local row = Instance.new("TextButton", CWScroll)
+            row.Size = UDim2.new(1, -6, 0, 22)
+            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+            row.BorderSizePixel = 0
+            row.Text = ""
+            row.AutoButtonColor = false
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            
+            row.MouseButton1Click:Connect(function()
+                Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
+                task.delay(0.2, function()
+                     Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+                end)
+            end)
+            
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Text = w
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 12
+            lbl.TextColor3 = THEME.Text
+            lbl.Size = UDim2.new(1, -30, 1, 0)
+            lbl.Position = UDim2.new(0, 5, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local del = Instance.new("TextButton", row)
+            del.Text = "X"
+            del.Font = Enum.Font.GothamBold
+            del.TextSize = 11
+            del.TextColor3 = Color3.fromRGB(255, 80, 80)
+            del.Size = UDim2.new(0, 22, 1, 0)
+            del.Position = UDim2.new(1, -22, 0, 0)
+            del.BackgroundTransparency = 1
+            
+            del.MouseButton1Click:Connect(function()
+                table.remove(Config.CustomWords, i)
+                SaveConfig()
+                Blacklist[w] = true
+                RefreshCustomWords()
+                ShowToast("Removed: " .. w, "warning")
+            end)
+        end
+    end
+    CWScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+end
+
+CWSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshCustomWords)
+
+CWAddBtn.MouseButton1Click:Connect(function()
+    local text = CWAddBox.Text
+    if text == "Add new word..." then return end
+    
+    text = text:gsub("[%s%c]+", ""):lower()
+    if #text < 2 then return end
+    
+    if not Config.CustomWords then Config.CustomWords = {} end
+    
+    for _, w in ipairs(Config.CustomWords) do
+        if w == text then
+            ShowToast("Word already in custom list!", "warning")
+            return
+        end
+    end
+    
+    local existsInMain = false
+    local c = text:sub(1,1)
+    if Buckets and Buckets[c] then
+        for _, w in ipairs(Buckets[c]) do
+            if w == text then existsInMain = true break end
+        end
+    end
+    
+    if existsInMain then
+         ShowToast("Word already in main dictionary!", "error")
+         return
+    end
+
+    table.insert(Config.CustomWords, text)
+    SaveConfig()
+    
+    table.insert(Words, text)
+    if c == "" then c = "#" end
+    Buckets[c] = Buckets[c] or {}
+    table.insert(Buckets[c], text)
+    
+    CWAddBox.Text = ""
+    CWAddBox:ReleaseFocus()
+    RefreshCustomWords()
+    ShowToast("Added custom word: " .. text, "success")
+end)
+
+RefreshCustomWords()
+
+-- === BLACKLIST UI IMPLEMENTATION ===
+local BlacklistFrame = Instance.new("Frame", ScreenGui)
+BlacklistFrame.Name = "BlacklistFrame"
+BlacklistFrame.Size = UDim2.new(0, 250, 0, 350)
+BlacklistFrame.Position = UDim2.new(0.5, 135, 0.5, -175)
+BlacklistFrame.BackgroundColor3 = THEME.Background
+BlacklistFrame.Visible = false
+BlacklistFrame.ClipsDescendants = true
+EnableDragging(BlacklistFrame)
+Instance.new("UICorner", BlacklistFrame).CornerRadius = UDim.new(0, 8)
+local BLStroke = Instance.new("UIStroke", BlacklistFrame)
+BLStroke.Color = Color3.fromRGB(255, 80, 80)
+BLStroke.Transparency = 0.5
+BLStroke.Thickness = 2
+
+local BLHeader = Instance.new("TextLabel", BlacklistFrame)
+BLHeader.Text = "Blacklist Manager"
+BLHeader.Font = Enum.Font.GothamBold
+BLHeader.TextSize = 14
+BLHeader.TextColor3 = THEME.Text
+BLHeader.Size = UDim2.new(1, 0, 0, 35)
+BLHeader.BackgroundTransparency = 1
+
+local BLCloseBtn = Instance.new("TextButton", BlacklistFrame)
+BLCloseBtn.Text = "X"
+BLCloseBtn.Font = Enum.Font.GothamBold
+BLCloseBtn.TextSize = 14
+BLCloseBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+BLCloseBtn.Size = UDim2.new(0, 30, 0, 30)
+BLCloseBtn.Position = UDim2.new(1, -30, 0, 2)
+BLCloseBtn.BackgroundTransparency = 1
+BLCloseBtn.MouseButton1Click:Connect(function() BlacklistFrame.Visible = false end)
+
+local BLSearchBox = Instance.new("TextBox", BlacklistFrame)
+BLSearchBox.Font = Enum.Font.Gotham
+BLSearchBox.TextSize = 12
+BLSearchBox.BackgroundColor3 = THEME.ItemBG
+BLSearchBox.Size = UDim2.new(1, -20, 0, 24)
+BLSearchBox.Position = UDim2.new(0, 10, 0, 35)
+BLSearchBox.TextColor3 = THEME.Text
+Instance.new("UICorner", BLSearchBox).CornerRadius = UDim.new(0, 4)
+SetupPhantomBox(BLSearchBox, "Search blacklist...")
+
+local BLScroll = Instance.new("ScrollingFrame", BlacklistFrame)
+BLScroll.Size = UDim2.new(1, -10, 1, -70)
+BLScroll.Position = UDim2.new(0, 5, 0, 65)
+BLScroll.BackgroundTransparency = 1
+BLScroll.ScrollBarThickness = 2
+BLScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 80, 80)
+BLScroll.CanvasSize = UDim2.new(0,0,0,0)
+
+local BLListLayout = Instance.new("UIListLayout", BLScroll)
+BLListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+BLListLayout.Padding = UDim.new(0, 2)
+
+local function RefreshBlacklist()
+    for _, c in ipairs(BLScroll:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
+    local queryRaw = BLSearchBox.Text
+    local query = (queryRaw == "Search blacklist...") and "" or queryRaw:lower():gsub("[%s%c]+", "")
+    
+    local sortedList = {}
+    for k, v in pairs(Blacklist) do
+        table.insert(sortedList, k)
+    end
+    table.sort(sortedList)
+    
+    local shownCount = 0
+    
+    for _, w in ipairs(sortedList) do
+        if query == "" or w:find(query, 1, true) then
+            shownCount = shownCount + 1
+            local row = Instance.new("Frame", BLScroll)
+            row.Size = UDim2.new(1, -6, 0, 22)
+            row.BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)
+            row.BorderSizePixel = 0
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Text = w
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 12
+            lbl.TextColor3 = THEME.Text
+            lbl.Size = UDim2.new(1, -30, 1, 0)
+            lbl.Position = UDim2.new(0, 5, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local del = Instance.new("TextButton", row)
+            del.Text = "X"
+            del.Font = Enum.Font.GothamBold
+            del.TextSize = 11
+            del.TextColor3 = Color3.fromRGB(255, 80, 80)
+            del.Size = UDim2.new(0, 22, 1, 0)
+            del.Position = UDim2.new(1, -22, 0, 0)
+            del.BackgroundTransparency = 1
+            
+            del.MouseButton1Click:Connect(function()
+                Blacklist[w] = nil
+                SaveBlacklist()
+                RefreshBlacklist()
+                ShowToast("Removed from blacklist: " .. w, "success")
+            end)
+        end
+    end
+    BLScroll.CanvasSize = UDim2.new(0, 0, 0, shownCount * 24)
+end
+
+BLSearchBox:GetPropertyChangedSignal("Text"):Connect(RefreshBlacklist)
+BlacklistManagerBtn.MouseButton1Click:Connect(function()
+    BlacklistFrame.Visible = not BlacklistFrame.Visible
+    BlacklistFrame.Parent = nil
+    BlacklistFrame.Parent = ScreenGui
+    if BlacklistFrame.Visible then RefreshBlacklist() end
+end)
+
+-- === SERVER BROWSER UI ===
+local ServerFrame = Instance.new("Frame", ScreenGui)
+ServerFrame.Name = "ServerBrowser"
+ServerFrame.Size = UDim2.new(0, 350, 0, 400)
+ServerFrame.Position = UDim2.new(0.5, -175, 0.5, -200)
+ServerFrame.BackgroundColor3 = THEME.Background
+ServerFrame.Visible = false
+ServerFrame.ClipsDescendants = true
+EnableDragging(ServerFrame)
+Instance.new("UICorner", ServerFrame).CornerRadius = UDim.new(0, 8)
+local SBStroke = Instance.new("UIStroke", ServerFrame)
+SBStroke.Color = THEME.Accent
+SBStroke.Transparency = 0.5
+SBStroke.Thickness = 2
+
+local SBHeader = Instance.new("TextLabel", ServerFrame)
+SBHeader.Text = "Server Browser"
+SBHeader.Font = Enum.Font.GothamBold
+SBHeader.TextSize = 16
+SBHeader.TextColor3 = THEME.Text
+SBHeader.Size = UDim2.new(1, 0, 0, 40)
+SBHeader.BackgroundTransparency = 1
+
+local SBClose = Instance.new("TextButton", ServerFrame)
+SBClose.Text = "X"
+SBClose.Font = Enum.Font.GothamBold
+SBClose.TextSize = 16
+SBClose.TextColor3 = Color3.fromRGB(255, 100, 100)
+SBClose.Size = UDim2.new(0, 40, 0, 40)
+SBClose.Position = UDim2.new(1, -40, 0, 0)
+SBClose.BackgroundTransparency = 1
+SBClose.MouseButton1Click:Connect(function() ServerFrame.Visible = false end)
+
+local SBList = Instance.new("ScrollingFrame", ServerFrame)
+SBList.Size = UDim2.new(1, -20, 1, -90)
+SBList.Position = UDim2.new(0, 10, 0, 50)
+SBList.BackgroundTransparency = 1
+SBList.ScrollBarThickness = 3
+SBList.ScrollBarImageColor3 = THEME.Accent
+
+local SBLayout = Instance.new("UIListLayout", SBList)
+SBLayout.Padding = UDim.new(0, 5)
+SBLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local ServerSortMode = "Smallest"
+
+local SBSortBtn = Instance.new("TextButton", ServerFrame)
+SBSortBtn.Text = "Sort: Smallest"
+SBSortBtn.Font = Enum.Font.GothamBold
+SBSortBtn.TextSize = 12
+SBSortBtn.BackgroundColor3 = THEME.ItemBG
+SBSortBtn.TextColor3 = THEME.SubText
+SBSortBtn.Size = UDim2.new(0.5, -15, 0, 30)
+SBSortBtn.Position = UDim2.new(0, 10, 1, -40)
+Instance.new("UICorner", SBSortBtn).CornerRadius = UDim.new(0, 6)
+
+local SBRefresh = Instance.new("TextButton", ServerFrame)
+SBRefresh.Text = "Refresh"
+SBRefresh.Font = Enum.Font.GothamBold
+SBRefresh.TextSize = 12
+SBRefresh.BackgroundColor3 = THEME.Accent
+SBRefresh.Size = UDim2.new(0.5, -15, 0, 30)
+SBRefresh.Position = UDim2.new(0.5, 5, 1, -40)
+Instance.new("UICorner", SBRefresh).CornerRadius = UDim.new(0, 6)
+
+local function FetchServers()
+    SBRefresh.Text = "..."
+    
+    for _, c in ipairs(SBList:GetChildren()) do
+        if c:IsA("Frame") then c:Destroy() end
+    end
+    
+    task.spawn(function()
+        local success, result = pcall(function()
+            return request({
+                Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100",
+                Method = "GET"
+            })
+        end)
+        
+        if success and result and result.Body then
+            local data = HttpService:JSONDecode(result.Body)
+            if data and data.data then
+                local servers = data.data
+                
+                if ServerSortMode == "Smallest" then
+                    table.sort(servers, function(a,b) return (a.playing or 0) < (b.playing or 0) end)
+                else
+                    table.sort(servers, function(a,b) return (a.playing or 0) > (b.playing or 0) end)
+                end
+                
+                for _, srv in ipairs(servers) do
+                    if srv.playing and srv.maxPlayers and srv.id ~= game.JobId then
+                        local row = Instance.new("Frame", SBList)
+                        row.Size = UDim2.new(1, -6, 0, 45)
+                        row.BackgroundColor3 = THEME.ItemBG
+                        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+                        
+                        local info = Instance.new("TextLabel", row)
+                        info.Text = "Players: " .. srv.playing .. " / " .. srv.maxPlayers .. "\nPing: " .. (srv.ping or "?") .. "ms"
+                        info.Size = UDim2.new(0.6, 0, 1, 0)
+                        info.Position = UDim2.new(0, 10, 0, 0)
+                        info.BackgroundTransparency = 1
+                        info.TextColor3 = THEME.Text
+                        info.Font = Enum.Font.Gotham
+                        info.TextSize = 12
+                        info.TextXAlignment = Enum.TextXAlignment.Left
+                        
+                        local join = Instance.new("TextButton", row)
+                        join.Text = "Join"
+                        join.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+                        join.Size = UDim2.new(0, 80, 0, 25)
+                        join.Position = UDim2.new(1, -90, 0.5, -12.5)
+                        join.Font = Enum.Font.GothamBold
+                        join.TextSize = 12
+                        join.TextColor3 = Color3.fromRGB(255,255,255)
+                        Instance.new("UICorner", join).CornerRadius = UDim.new(0, 4)
+                        
+                        join.MouseButton1Click:Connect(function()
+                            join.Text = "Joining..."
+                            ShowToast("Teleporting...", "success")
+                            
+                            if queue_on_teleport then
+                                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/yay.lua"))()')
+                            end
+
+                            task.spawn(function()
+                                local success, err = pcall(function()
+                                    game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, srv.id, Players.LocalPlayer)
+                                end)
+                                if not success then
+                                    join.Text = "Failed"
+                                    ShowToast("Teleport Failed: " .. tostring(err), "error")
+                                    task.wait(2)
+                                    join.Text = "Join"
+                                end
+                            end)
+                        end)
+                    end
+                end
+                
+                SBList.CanvasSize = UDim2.new(0,0,0, SBLayout.AbsoluteContentSize.Y)
+            end
+        else
+            ShowToast("Failed to fetch servers", "error")
+        end
+        SBRefresh.Text = "Refresh"
+    end)
+end
+
+SBSortBtn.MouseButton1Click:Connect(function()
+    if ServerSortMode == "Smallest" then
+        ServerSortMode = "Largest"
+    else
+        ServerSortMode = "Smallest"
+    end
+    SBSortBtn.Text = "Sort: " .. ServerSortMode
+    FetchServers()
+end)
+
+SBRefresh.MouseButton1Click:Connect(FetchServers)
+
+ServerBrowserBtn.MouseButton1Click:Connect(function()
+    ServerFrame.Visible = not ServerFrame.Visible
+    ServerFrame.Parent = nil
+    ServerFrame.Parent = ScreenGui
+    
+    if ServerFrame.Visible then
+        FetchServers()
+    end
+end)
+
 -- === SETUP WINDOW FRAMES (Didefinisikan dulu sebelum dikoneksikan) ===
 
 -- 1. Custom Words Window
