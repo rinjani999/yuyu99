@@ -40,7 +40,7 @@ local function ColorToRGB(c)
 end
 
 local ConfigFile = "WordHelper_Config.json"
-local BlacklistFile = "WordHelper_Blacklist.json" -- [MODIFIED] Menggunakan JSON
+local BlacklistFile = "WordHelper_Blacklist.json" 
 
 local Config = {
     CPM = 550,
@@ -93,7 +93,6 @@ local Blacklist = {}
 
 local function SaveBlacklist()
     if writefile then
-        -- Encode table ke JSON string
         local success, encoded = pcall(function() return HttpService:JSONEncode(Blacklist) end)
         if success then
             writefile(BlacklistFile, encoded)
@@ -110,7 +109,6 @@ local function LoadBlacklist()
             Blacklist = {}
         end
     else
-        -- Migrasi dari format lama (txt) jika json tidak ada
         if isfile and isfile("blacklist.txt") then
             local content = readfile("blacklist.txt")
             for w in content:gmatch("[^\r\n]+") do
@@ -119,7 +117,7 @@ local function LoadBlacklist()
                     Blacklist[clean] = true
                 end
             end
-            SaveBlacklist() -- Simpan sebagai json baru
+            SaveBlacklist()
         else
             Blacklist = {}
         end
@@ -131,7 +129,7 @@ local function AddToBlacklist(word)
     word = word:lower()
     if not Blacklist[word] then
         Blacklist[word] = true
-        SaveBlacklist() -- Auto save setiap penambahan
+        SaveBlacklist()
     end
 end
 
@@ -2080,6 +2078,21 @@ local function GetGameTextBox()
     return UserInputService:GetFocusedTextBox()
 end
 
+local function IsNotificationVisible(keyword)
+    local player = Players.LocalPlayer
+    local gui = player and player:FindFirstChild("PlayerGui")
+    if not gui then return false end
+    
+    for _, v in ipairs(gui:GetDescendants()) do
+        if v:IsA("TextLabel") and v.Visible and v.TextTransparency < 1 then
+            if v.Text:lower():find(keyword) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- [6] REVISED SMARTTYPE TO FIX STUCK ON ERROR AND RETRY
 local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
     if unloaded then return end
@@ -2172,34 +2185,44 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                -- [FIXED LOGIC] Check if word is in our dictionary before blacklisting
-                local existsInDict = false
-                local fChar = targetWord:sub(1,1):lower()
-                if Buckets and Buckets[fChar] then
-                    -- Simple linear scan in bucket is fast enough for small buckets
-                    for _, w in ipairs(Buckets[fChar]) do
-                        if w == targetWord then
-                            existsInDict = true
-                            break
-                        end
-                    end
+                
+                local postCheck = GetGameTextBox()
+                if postCheck and postCheck.Text == targetWord then
+                     StatusText.Text = "Enter failed? Retrying..."
+                     PressEnter()
+                     task.wait(0.5)
+                     if GetCurrentGameWord() == currentDetected then
+                         StatusText.Text = "Submission Failed (Lag?)"
+                         StatusText.TextColor3 = THEME.Warning
+                         Backspace(#targetWord)
+                         isTyping = false
+                         forceUpdateList = true
+                         return
+                     end
                 end
 
-                if existsInDict then
-                    -- Word exists but game rejected it -> Assume Used or Server Lag
-                    -- Add to temporary session blacklist (UsedWords)
-                    StatusText.Text = "Rejected (Used?): '" .. targetWord .. "'"
+                local isAlreadyUsed = false
+                local scanStart = tick()
+                while (tick() - scanStart) < 0.4 do 
+                    if IsNotificationVisible("used") or IsNotificationVisible("already") then
+                        isAlreadyUsed = true
+                        break
+                    end
+                    task.wait(0.05)
+                end
+
+                if isAlreadyUsed then
+                    StatusText.Text = "Rejected (Already Used)"
                     StatusText.TextColor3 = THEME.SubText
                     UsedWords[targetWord] = true
                 else
-                    -- Word NOT in dictionary -> Assume Invalid/Nonsense
-                    -- Add to permanent blacklist
-                    AddToBlacklist(targetWord)
-                    StatusText.Text = "Rejected: removed '" .. targetWord .. "'"
+                    StatusText.Text = "Invalid Word -> Blacklisted"
                     StatusText.TextColor3 = THEME.Warning
+                    AddToBlacklist(targetWord)
                 end
 
                 RandomPriority[targetWord] = nil
+                
                 for k, list in pairs(RandomOrderCache) do
                     for i = #list, 1, -1 do
                         if list[i] == targetWord then table.remove(list, i) end
@@ -2233,7 +2256,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     Backspace(#current)
                 end
 
-                -- [FIX] Pastikan masuk ke UsedWords jika berhasil
                 UsedWords[targetWord] = true
                 isMyTurnLogDetected = false
                 task.wait(0.2)
@@ -2334,28 +2356,24 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                      end
                 end
 
-                -- [FIXED LOGIC] Check if word is in our dictionary before blacklisting
-                local existsInDict = false
-                local fChar = targetWord:sub(1,1):lower()
-                if Buckets and Buckets[fChar] then
-                    for _, w in ipairs(Buckets[fChar]) do
-                        if w == targetWord then
-                            existsInDict = true
-                            break
-                        end
+                local isAlreadyUsed = false
+                local scanStart = tick()
+                while (tick() - scanStart) < 0.4 do 
+                    if IsNotificationVisible("used") or IsNotificationVisible("already") then
+                        isAlreadyUsed = true
+                        break
                     end
+                    task.wait(0.05)
                 end
 
-                if existsInDict then
-                    -- Valid word rejected -> Likely Already Used
-                    StatusText.Text = "Rejected (Used?): '" .. targetWord .. "'"
+                if isAlreadyUsed then
+                    StatusText.Text = "Rejected (Already Used)"
                     StatusText.TextColor3 = THEME.SubText
                     UsedWords[targetWord] = true
                 else
-                    -- Invalid word -> Blacklist
-                    AddToBlacklist(targetWord)
-                    StatusText.Text = "Rejected: removed '" .. targetWord .. "'"
+                    StatusText.Text = "Invalid Word -> Blacklisted"
                     StatusText.TextColor3 = THEME.Warning
+                    AddToBlacklist(targetWord)
                 end
 
                 for k, list in pairs(RandomOrderCache) do
