@@ -71,8 +71,7 @@ local Config = {
 }
 
 -- === SYSTEM CACHE (Session Only) ===
--- Semua kata yang sudah dipakai atau ditolak masuk ke sini
--- Akan direset saat UI game tertutup (ronde selesai)
+-- UsedWords berfungsi sebagai cache sementara dan session-blacklist
 local UsedWords = {} 
 
 local function SaveConfig()
@@ -86,6 +85,7 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
+            -- Default values for new sliders
             if not Config.PanicTrigger then Config.PanicTrigger = 10 end
             if not Config.AutoBlatantTrigger then Config.AutoBlatantTrigger = 7 end
         end
@@ -143,7 +143,7 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
-local lastFrameVisible = false -- State tracker untuk reset cache
+local lastFrameVisible = false -- Tracker untuk deteksi akhir ronde
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -653,13 +653,11 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
--- Increased height to accommodate new sliders
 SlidersFrame.Size = UDim2.new(1, 0, 0, 185) 
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 185) 
--- Moved down to start after new SlidersFrame height
 TogglesFrame.Position = UDim2.new(0, 0, 0, 185) 
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
@@ -671,12 +669,10 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        -- Height 185 to show all sliders
         Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        -- 185 (Sliders) + 185 (Toggles) = 370
         Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 370), Position = UDim2.new(0, 0, 1, -370)})
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -490)})
         TogglesFrame.Visible = true
@@ -1562,159 +1558,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                -- LOGIKA UTAMA: JIKA DITOLAK -> MASUK USEDWORDS (SESSION BLOCK)
-                if UsedWords[targetWord] then
-                     ShowToast("Already used (Race Condition)!", "warning")
-                else
-                     UsedWords[targetWord] = true
-                     ShowToast("Rejected (Session Block)", "warning")
-                end
-
-                RandomPriority[targetWord] = nil
-                for k, list in pairs(RandomOrderCache) do
-                    for i = #list, 1, -1 do if list[i] == targetWord then table.remove(list, i) end end
-                end
-
-                StatusText.Text = "Rejected: '" .. targetWord .. "'"
-                StatusText.TextColor3 = THEME.Warning
-                local focused = UserInputService:GetFocusedTextBox()
-                if focused and focused:IsDescendantOf(game) and focused.TextEditable then
-                    focused.Text = ""
-                else
-                    Backspace(#targetWord + 5)
-                end
-                lastDetected = "---"
-                isTyping = false
-                forceUpdateList = true
-                return
-            else
-                StatusText.Text = "Word Cleared (Corrected)"
-                StatusText.TextColor3 = THEME.SubText
-                local current = GetCurrentGameWord()
-                if #current > 0 then Backspace(#current) end
-                UsedWords[targetWord] = true
-                isMyTurnLogDetected = false
-                task.wait(0.2)
-            end
-        else
-            -- LOGIKA UTAMA PENGETIKAN KATA BARU
-            local missingPart = ""
-            if targetWord:sub(1, #currentDetected) == currentDetected then
-                missingPart = targetWord:sub(#currentDetected + 1)
-            else
-                missingPart = targetWord
-            end
-
-            local letters = "abcdefghijklmnopqrstuvwxyz"
-            local panicModeActive = false -- Flag lokal untuk panic override
-            
-            for i = 1, #missingPart do
-                -- [LOGIKA 1: AUTO BLATANT RESET]
-                -- Jika trigger aktif (dari Loop Part 4), reset pengetikan
-                if needsBlatantReset then
-                    needsBlatantReset = false
-                    local focused = UserInputService:GetFocusedTextBox()
-                    if focused and focused:IsDescendantOf(game) and focused.TextEditable then
-                        local len = #focused.Text
-                        Backspace(len + 1) -- Hapus semua
-                        task.wait(0.1)
-                        isTyping = false 
-                        -- Panggil ulang SmartType secara rekursif dengan mode bypass
-                        return SmartType(targetWord, "", false, true)
-                    end
-                end
-
-                if not bypassTurn and not GetTurnInfo() then
-                     task.wait(0.05)
-                     if not GetTurnInfo() then break end
-                end
-
-                -- [LOGIKA 2: PANIC OVERRIDE]
-                -- Cek waktu, jika < PanicTrigger, abaikan error rate dan percepat
-                local timer = GetTimerSecondsHelper()
-                if timer and timer < Config.PanicTrigger and (useHumanization or errorRate > 0) then
-                    panicModeActive = true
-                end
-
-                local ch = missingPart:sub(i, i)
-                
-                -- Jika Panic Mode atau Blatant Mode aktif
-                if panicModeActive or isBlatant then
-                     SimulateKey(ch)
-                     task.wait(0.005) -- Delay minimal
-                else
-                    -- Normal Humanize Logic dengan Error Rate
-                    if errorRate > 0 and (math.random() < (errorRate / 100)) then
-                        local typoChar
-                        repeat
-                            local idx = math.random(1, #letters)
-                            typoChar = letters:sub(idx, idx)
-                        until typoChar ~= ch
-                        SimulateKey(typoChar)
-                        
-                        if riskyMistakes then
-                             task.wait(0.05 + math.random() * 0.1)
-                             PressEnter()
-                        end
-
-                        task.wait(CalculateDelayForKeys(lastKey, typoChar))
-                        lastKey = typoChar
-                        local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
-                        
-                        -- Cek timer lagi sebelum menunggu lama
-                        if GetTimerSecondsHelper() and GetTimerSecondsHelper() < Config.PanicTrigger then
-                             task.wait(0.05) -- Jangan menunggu jika waktu mepet
-                        else
-                             task.wait(realize)
-                        end
-                        
-                        SimulateKey(Enum.KeyCode.Backspace)
-                        lastKey = nil
-                        task.wait(0.05 + math.random() * 0.08)
-                        SimulateKey(ch)
-                        task.wait(CalculateDelayForKeys(lastKey, ch))
-                        lastKey = ch
-                    else
-                        SimulateKey(ch)
-                        task.wait(CalculateDelayForKeys(lastKey, ch))
-                        lastKey = ch
-                    end
-                    if useHumanization and math.random() < 0.03 then
-                        task.wait(0.12 + math.random() * 0.5)
-                    end
-                end
-            end
-
-            -- Pre-submission verify (Skip jika risky atau panic)
-            if not riskyMistakes and not panicModeActive then
-                task.wait(0.1)
-                local finalCheck = GetGameTextBox()
-                if finalCheck and finalCheck.Text ~= targetWord then
-                    StatusText.Text = "Typing mismatch detected!"
-                    StatusText.TextColor3 = THEME.Warning
-                    Backspace(#finalCheck.Text)
-                    
-                    isTyping = false
-                    forceUpdateList = true
-                    return
-                end
-            end
-
-            PressEnter()
-            
-            local verifyStart = tick()
-            local accepted = false
-            
-            while (tick() - verifyStart) < 1.5 do
-                local currentCheck = GetCurrentGameWord()
-                if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
-                     accepted = true
-                     break
-                end
-                task.wait(0.05)
-            end
-
-            if not accepted then
                 
                 local postCheck = GetGameTextBox()
                 if postCheck and postCheck.Text == targetWord then
@@ -1763,8 +1606,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end)
                 return
             else
-                StatusText.Text = "Verification Failed"
-                StatusText.TextColor3 = THEME.Warning
+                StatusText.Text = "Word Cleared (Corrected)"
+                StatusText.TextColor3 = THEME.SubText
                 local current = GetCurrentGameWord()
                 if #current > 0 then Backspace(#current) end
                 UsedWords[targetWord] = true
