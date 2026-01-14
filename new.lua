@@ -41,11 +41,10 @@ local function ColorToRGB(c)
 end
 
 local ConfigFile = "WordHelper_Config.json"
-local BlacklistFile = "blacklist.json"
 
 local Config = {
     CPM = 550,
-    Blatant = false, -- Bisa boolean atau string "Auto"
+    Blatant = false,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -59,8 +58,8 @@ local Config = {
         _8p = true
     },
     PanicMode = true,
-    PanicTrigger = 10, -- Default 10s
-    AutoBlatantTrigger = 7, -- Default 7s
+    PanicTrigger = 10,
+    AutoBlatantTrigger = 7,
     ShowKeyboard = false,
     ErrorRate = 5,
     ThinkDelay = 0.8,
@@ -71,27 +70,10 @@ local Config = {
     KeyboardLayout = "QWERTY"
 }
 
--- === SYSTEM BLACKLIST & CACHE ===
-local Blacklist = {}
-local UsedWords = {} -- Cache sementara untuk ronde ini
-
-local function SaveBlacklist()
-    if writefile then
-        writefile(BlacklistFile, HttpService:JSONEncode(Blacklist))
-    end
-end
-
-local function LoadBlacklist()
-    if isfile and isfile(BlacklistFile) then
-        local success, decoded = pcall(function()
-            return HttpService:JSONDecode(readfile(BlacklistFile))
-        end)
-        if success and decoded then
-            Blacklist = decoded
-        end
-    end
-end
-LoadBlacklist()
+-- === SYSTEM CACHE (Session Only) ===
+-- Semua kata yang sudah dipakai atau ditolak masuk ke sini
+-- Akan direset saat UI game tertutup (ronde selesai)
+local UsedWords = {} 
 
 local function SaveConfig()
     if writefile then
@@ -104,7 +86,6 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
-            -- Ensure triggers exist if loading old config
             if not Config.PanicTrigger then Config.PanicTrigger = 10 end
             if not Config.AutoBlatantTrigger then Config.AutoBlatantTrigger = 7 end
         end
@@ -138,7 +119,7 @@ local unloaded = false
 local isMyTurnLogDetected = false
 local logRequiredLetters = ""
 local turnExpiryTime = 0
-local lastBlatantState = false -- Untuk mendeteksi transisi Auto Blatant
+local lastBlatantState = false 
 
 local RandomOrderCache = {}
 local RandomPriority = {}
@@ -162,6 +143,7 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
+local lastFrameVisible = false -- State tracker untuk reset cache
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -390,7 +372,6 @@ local function GetTurnInfo(providedFrame)
 end
 
 -- === CRITICAL HELPER: GetRemainingTime ===
--- Fungsi ini sangat penting untuk fitur Panic Override
 local function GetRemainingTime()
     local player = Players.LocalPlayer
     local gui = player and player:FindFirstChild("PlayerGui")
@@ -1581,22 +1562,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
             end
 
             if not accepted then
-                -- Logika penanganan kegagalan (Blacklist vs UsedWords)
-                local finalStrikes = GetStrikeCount()
+                -- LOGIKA UTAMA: JIKA DITOLAK -> MASUK USEDWORDS (SESSION BLOCK)
                 if UsedWords[targetWord] then
                      ShowToast("Already used (Race Condition)!", "warning")
                 else
-                    -- LOGIKA BARU: Cek apakah nyawa berkurang
-                     if finalStrikes > initialStrikes then
-                         -- Nyawa berkurang = INVALID WORD (Kamus Salah)
-                         Blacklist[targetWord] = true
-                         SaveBlacklist()
-                         ShowToast("Invalid Word (Strike Detected)", "error")
-                     else
-                         -- Nyawa TIDAK berkurang = ALREADY USED (Sudah Dipakai)
-                         UsedWords[targetWord] = true
-                         ShowToast("Marked as Used (No Strike Loss)", "warning")
-                     end
+                     UsedWords[targetWord] = true
+                     ShowToast("Rejected (Session Block)", "warning")
                 end
 
                 RandomPriority[targetWord] = nil
@@ -1760,21 +1731,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                      end
                 end
 
-                local finalStrikes = GetStrikeCount()
+                -- LOGIKA UTAMA: JIKA DITOLAK -> MASUK USEDWORDS (SESSION BLOCK)
                 if UsedWords[targetWord] then
                      ShowToast("Already used (Race Condition)!", "warning")
                 else
-                     -- LOGIKA BARU: Cek apakah nyawa berkurang
-                     if finalStrikes > initialStrikes then
-                         -- Nyawa berkurang = INVALID WORD (Kamus Salah)
-                         Blacklist[targetWord] = true
-                         SaveBlacklist()
-                         ShowToast("Invalid Word (Strike Detected)", "error")
-                     else
-                         -- Nyawa TIDAK berkurang = ALREADY USED (Sudah Dipakai)
-                         UsedWords[targetWord] = true
-                         ShowToast("Marked as Used (No Strike Loss)", "warning")
-                     end
+                     UsedWords[targetWord] = true
+                     ShowToast("Rejected (Session Block)", "warning")
                 end
 
                 for k, list in pairs(RandomOrderCache) do
@@ -1897,7 +1859,7 @@ UpdateList = function(detectedText, requiredLetter)
         
         if bucket then
             local checkWord = function(w)
-                if Blacklist[w] or UsedWords[w] then return end
+                if UsedWords[w] then return end -- Cek UsedWords
                 if suffixMode ~= "" and w:sub(-#suffixMode) ~= suffixMode then return end
                 
                 local isLengthMatch = true
@@ -1974,7 +1936,7 @@ UpdateList = function(detectedText, requiredLetter)
             local fallbackBucket = (Buckets and Buckets[reqChar]) or Words
             if fallbackBucket then
                 for _, w in ipairs(fallbackBucket) do
-                    if not Blacklist[w] and not UsedWords[w] then
+                    if not UsedWords[w] then -- Cek UsedWords
                          local mLen = GetMatchLength(w, requiredLetter)
                          if mLen == #requiredLetter then
                              table.insert(matches, w)
@@ -2219,6 +2181,14 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
 
+        -- [LOGIKA BARU]: Auto Clear Cache Saat Ronde Selesai (UI Game Menghilang)
+        if not isVisible and lastFrameVisible then
+             UsedWords = {}
+             StatusText.Text = "Round Ended - Words Cleared"
+             StatusText.TextColor3 = THEME.SubText
+        end
+        lastFrameVisible = isVisible
+
         local seconds = nil
         if isVisible then
             local circle = frame:FindFirstChild("Circle")
@@ -2284,7 +2254,7 @@ runConn = RunService.RenderStepped:Connect(function()
                 local bestWord = nil
                 local bestLen = 999
                 for _, w in ipairs(bucket) do
-                    if not Blacklist[w] and not UsedWords[w] and w:sub(1, #detected) == detected then
+                    if not UsedWords[w] and w:sub(1, #detected) == detected then
                         if #w < bestLen then
                             bestWord = w
                             bestLen = #w
@@ -2383,13 +2353,6 @@ runConn = RunService.RenderStepped:Connect(function()
 
         local typeLbl = frame and frame:FindFirstChild("Type")
         local typeVisible = typeLbl and typeLbl.Visible
-        
-        -- [1] AUTO CLEAR CACHE SETIAP RONDE
-        if typeVisible and not lastTypeVisible then
-            UsedWords = {}
-            StatusText.Text = "New Round - Words Reset"
-            StatusText.TextColor3 = THEME.Success
-        end
         lastTypeVisible = typeVisible
 
         if censored then
@@ -2421,7 +2384,7 @@ runConn = RunService.RenderStepped:Connect(function()
         end
 
         if not isVisible then
-            if StatusText.Text ~= "Not in Round" then
+            if StatusText.Text ~= "Round Ended - Words Cleared" and StatusText.Text ~= "Not in Round" then
                 StatusText.Text = "Not in Round"
                 StatusText.TextColor3 = THEME.SubText
                 Tween(StatusDot, {BackgroundColor3 = THEME.SubText})
