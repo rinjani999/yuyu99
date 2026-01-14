@@ -59,6 +59,8 @@ local Config = {
         _8p = true
     },
     PanicMode = true,
+    PanicTrigger = 10, -- Default 10s
+    AutoBlatantTrigger = 7, -- Default 7s
     ShowKeyboard = false,
     ErrorRate = 5,
     ThinkDelay = 0.8,
@@ -102,6 +104,9 @@ local function LoadConfig()
         local success, decoded = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and decoded then
             for k, v in pairs(decoded) do Config[k] = v end
+            -- Ensure triggers exist if loading old config
+            if not Config.PanicTrigger then Config.PanicTrigger = 10 end
+            if not Config.AutoBlatantTrigger then Config.AutoBlatantTrigger = 7 end
         end
     end
 end
@@ -667,12 +672,14 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 125)
+-- Increased height to accommodate new sliders
+SlidersFrame.Size = UDim2.new(1, 0, 0, 185) 
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 185) 
-TogglesFrame.Position = UDim2.new(0, 0, 0, 125)
+-- Moved down to start after new SlidersFrame height
+TogglesFrame.Position = UDim2.new(0, 0, 0, 185) 
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -683,12 +690,14 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 125), Position = UDim2.new(0, 0, 1, -125)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -245)})
+        -- Height 185 to show all sliders
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 310), Position = UDim2.new(0, 0, 1, -310)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -430)})
+        -- 185 (Sliders) + 185 (Toggles) = 370
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 370), Position = UDim2.new(0, 0, 1, -370)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -490)})
         TogglesFrame.Visible = true
     end
 end
@@ -988,6 +997,78 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     Config.ThinkDelay = thinkDelayCurrent
     ThinkFill.Size = UDim2.new(pct, 0, 1, 0)
     ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
+end)
+
+-- === NEW SLIDERS (Panic & Auto Blatant) ===
+
+-- Panic Trigger Slider
+local PanicLabel = Instance.new("TextLabel", SlidersFrame)
+PanicLabel.Text = "Panic Trigger: " .. Config.PanicTrigger .. "s"
+PanicLabel.Font = Enum.Font.GothamMedium
+PanicLabel.TextSize = 11
+PanicLabel.TextColor3 = THEME.SubText
+PanicLabel.Size = UDim2.new(1, -30, 0, 18)
+PanicLabel.Position = UDim2.new(0, 15, 0, 88)
+PanicLabel.BackgroundTransparency = 1
+PanicLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local PanicBg = Instance.new("Frame", SlidersFrame)
+PanicBg.Size = UDim2.new(1, -30, 0, 6)
+PanicBg.Position = UDim2.new(0, 15, 0, 108)
+PanicBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", PanicBg).CornerRadius = UDim.new(1, 0)
+
+local PanicFill = Instance.new("Frame", PanicBg)
+local panicPct = (Config.PanicTrigger - 1) / 13 -- 1 to 14 range
+PanicFill.Size = UDim2.new(panicPct, 0, 1, 0)
+PanicFill.BackgroundColor3 = Color3.fromRGB(255, 150, 50)
+Instance.new("UICorner", PanicFill).CornerRadius = UDim.new(1, 0)
+
+local PanicBtn = Instance.new("TextButton", PanicBg)
+PanicBtn.Size = UDim2.new(1,0,1,0)
+PanicBtn.BackgroundTransparency = 1
+PanicBtn.Text = ""
+
+SetupSlider(PanicBtn, PanicBg, PanicFill, function(pct)
+    local val = math.floor(1 + (pct * 13)) -- Range 1 to 14
+    Config.PanicTrigger = val
+    PanicFill.Size = UDim2.new(pct, 0, 1, 0)
+    PanicLabel.Text = "Panic Trigger: " .. val .. "s"
+end)
+
+-- Auto Blatant Trigger Slider
+local BlatantTrigLabel = Instance.new("TextLabel", SlidersFrame)
+BlatantTrigLabel.Text = "Auto Blatant Trigger: " .. Config.AutoBlatantTrigger .. "s"
+BlatantTrigLabel.Font = Enum.Font.GothamMedium
+BlatantTrigLabel.TextSize = 11
+BlatantTrigLabel.TextColor3 = THEME.SubText
+BlatantTrigLabel.Size = UDim2.new(1, -30, 0, 18)
+BlatantTrigLabel.Position = UDim2.new(0, 15, 0, 114)
+BlatantTrigLabel.BackgroundTransparency = 1
+BlatantTrigLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local BlatantTrigBg = Instance.new("Frame", SlidersFrame)
+BlatantTrigBg.Size = UDim2.new(1, -30, 0, 6)
+BlatantTrigBg.Position = UDim2.new(0, 15, 0, 134)
+BlatantTrigBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", BlatantTrigBg).CornerRadius = UDim.new(1, 0)
+
+local BlatantTrigFill = Instance.new("Frame", BlatantTrigBg)
+local blatantPct = (Config.AutoBlatantTrigger - 1) / 13
+BlatantTrigFill.Size = UDim2.new(blatantPct, 0, 1, 0)
+BlatantTrigFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+Instance.new("UICorner", BlatantTrigFill).CornerRadius = UDim.new(1, 0)
+
+local BlatantTrigBtn = Instance.new("TextButton", BlatantTrigBg)
+BlatantTrigBtn.Size = UDim2.new(1,0,1,0)
+BlatantTrigBtn.BackgroundTransparency = 1
+BlatantTrigBtn.Text = ""
+
+SetupSlider(BlatantTrigBtn, BlatantTrigBg, BlatantTrigFill, function(pct)
+    local val = math.floor(1 + (pct * 13))
+    Config.AutoBlatantTrigger = val
+    BlatantTrigFill.Size = UDim2.new(pct, 0, 1, 0)
+    BlatantTrigLabel.Text = "Auto Blatant Trigger: " .. val .. "s"
 end)
 
 local function CreateToggle(text, pos, callback)
@@ -1576,9 +1657,9 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
 
                 -- [LOGIKA 2: PANIC OVERRIDE]
-                -- Cek waktu, jika < 10 detik, abaikan error rate dan percepat
+                -- Cek waktu, jika < PanicTrigger, abaikan error rate dan percepat
                 local timer = GetTimerSecondsHelper()
-                if timer and timer < 10 and (useHumanization or errorRate > 0) then
+                if timer and timer < Config.PanicTrigger and (useHumanization or errorRate > 0) then
                     panicModeActive = true
                 end
 
@@ -1608,7 +1689,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                         local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
                         
                         -- Cek timer lagi sebelum menunggu lama
-                        if GetTimerSecondsHelper() and GetTimerSecondsHelper() < 10 then
+                        if GetTimerSecondsHelper() and GetTimerSecondsHelper() < Config.PanicTrigger then
                              task.wait(0.05) -- Jangan menunggu jika waktu mepet
                         else
                              task.wait(realize)
@@ -2099,12 +2180,13 @@ do
     StatsData.Timer = st
 
     local sc = Instance.new("TextLabel")
-    st.Size = UDim2.new(1, 0, 0, 20)
+    sc.Size = UDim2.new(1, 0, 0, 20)
     sc.Position = UDim2.new(0, 0, 0, 30)
     sc.BackgroundTransparency = 1
     sc.TextColor3 = THEME.SubText
     sc.Font = Enum.Font.Gotham
     sc.TextSize = 12
+    sc.TextXAlignment = Enum.TextXAlignment.Center -- CENTERED
     sc.Text = "Words: 0"
     sc.Parent = sf
     StatsData.Count = sc
@@ -2147,16 +2229,19 @@ runConn = RunService.RenderStepped:Connect(function()
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
                 
-                -- [4] AUTO BLATANT LOGIC (Diperbarui: Trigger < 7 Detik)
+                -- [4] AUTO BLATANT LOGIC (Updated to use Slider)
+                local isMyTurnCheck, _ = GetTurnInfo(frame)
+                
                 if Config.Blatant == "Auto" then
-                    if seconds and seconds < 7 then
+                    -- Only trigger if it is MY TURN and time is low
+                    if isMyTurnCheck and seconds and seconds < Config.AutoBlatantTrigger then
                         if not isBlatant then -- Transisi dari OFF ke ON (Trigger)
                             isBlatant = true
                             if isTyping then
                                 needsBlatantReset = true -- Flag global untuk mereset SmartType (Part 3)
                             end
                         end
-                        StatusText.Text = "Auto Blatant Active! (< 7s)"
+                        StatusText.Text = "Auto Blatant Active! (< " .. Config.AutoBlatantTrigger .. "s)"
                         StatusText.TextColor3 = Color3.fromRGB(255, 100, 50)
                     else
                         isBlatant = false
