@@ -43,8 +43,6 @@ local ConfigFile = "WordHelper_Config.json"
 local Config = {
     CPM = 550,
     Blatant = false,
-    BlatantMode = "Off",
-    AutoBlatantTimer = 5,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -86,8 +84,7 @@ end
 LoadConfig()
 
 local currentCPM = Config.CPM
-local blatantMode = Config.BlatantMode or (Config.Blatant and "On" or "Off")
-local autoBlatantTimer = Config.AutoBlatantTimer or 5
+local isBlatant = Config.Blatant
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -173,7 +170,7 @@ LStroke.Thickness = 2
 local LoadingTitle = Instance.new("TextLabel", LoadingFrame)
 LoadingTitle.Size = UDim2.new(1, 0, 0, 40)
 LoadingTitle.BackgroundTransparency = 1
-LoadingTitle.Text = "WordHelper V4.1"
+LoadingTitle.Text = "WordHelper V4"
 LoadingTitle.TextColor3 = THEME.Accent
 LoadingTitle.Font = Enum.Font.GothamBold
 LoadingTitle.TextSize = 18
@@ -631,12 +628,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -647,12 +644,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 525), Position = UDim2.new(0, 0, 1, -525)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -645)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
         TogglesFrame.Visible = true
     end
 end
@@ -686,8 +683,6 @@ local function SetupSlider(btn, bg, fill, callback)
             Config.CPM = currentCPM
             Config.ErrorRate = errorRate
             Config.ThinkDelay = thinkDelayCurrent
-            Config.PanicTimerThreshold = panicTimerThreshold
-            Config.AutoBlatantTimer = autoBlatantTimer
         end
         Update()
         move = RunService.RenderStepped:Connect(Update)
@@ -771,8 +766,7 @@ local function GenerateKeyboard()
         end
     end
     local space = CreateKey(" ", UDim2.new(0.5, -100, 0, startY + 3*35), UDim2.new(0, 200, 0, 30))
-    local spaceLabel = space:FindFirstChild("TextLabel")
-    if spaceLabel then spaceLabel.Text = "SPACE" end
+    space.FindFirstChild(space, "TextLabel").Text = "SPACE"
 end
 
 GenerateKeyboard()
@@ -991,41 +985,6 @@ SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
-local AutoBlatantTimerLabel = Instance.new("TextLabel", SlidersFrame)
-AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
-AutoBlatantTimerLabel.Font = Enum.Font.GothamMedium
-AutoBlatantTimerLabel.TextSize = 11
-AutoBlatantTimerLabel.TextColor3 = THEME.SubText
-AutoBlatantTimerLabel.Size = UDim2.new(1, -30, 0, 18)
-AutoBlatantTimerLabel.Position = UDim2.new(0, 15, 0, 114)
-AutoBlatantTimerLabel.BackgroundTransparency = 1
-AutoBlatantTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local AutoBlatantTimerBg = Instance.new("Frame", SlidersFrame)
-AutoBlatantTimerBg.Size = UDim2.new(1, -30, 0, 6)
-AutoBlatantTimerBg.Position = UDim2.new(0, 15, 0, 134)
-AutoBlatantTimerBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", AutoBlatantTimerBg).CornerRadius = UDim.new(1, 0)
-
-local autoBlatantTimerPct = (autoBlatantTimer - 1) / 13
-local AutoBlatantTimerFill = Instance.new("Frame", AutoBlatantTimerBg)
-AutoBlatantTimerFill.Size = UDim2.new(autoBlatantTimerPct, 0, 1, 0)
-AutoBlatantTimerFill.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-Instance.new("UICorner", AutoBlatantTimerFill).CornerRadius = UDim.new(1, 0)
-
-local AutoBlatantTimerBtn = Instance.new("TextButton", AutoBlatantTimerBg)
-AutoBlatantTimerBtn.Size = UDim2.new(1,0,1,0)
-AutoBlatantTimerBtn.BackgroundTransparency = 1
-AutoBlatantTimerBtn.Text = ""
-
-SetupSlider(AutoBlatantTimerBtn, AutoBlatantTimerBg, AutoBlatantTimerFill, function(pct)
-    autoBlatantTimer = math.floor(1 + pct * 13)
-    Config.AutoBlatantTimer = autoBlatantTimer
-    AutoBlatantTimerFill.Size = UDim2.new(pct, 0, 1, 0)
-    AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
-end)
-
-
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
     btn.Text = text
@@ -1154,37 +1113,12 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant: "..blatantMode, UDim2.new(0, 15, 0, 115), function()
-    if blatantMode == "Off" then 
-        blatantMode = "On"
-    elseif blatantMode == "On" then 
-        blatantMode = "Auto"
-    else 
-        blatantMode = "Off"
-    end
-    Config.BlatantMode = blatantMode
-    
-    local color
-    if blatantMode == "On" then
-        color = Color3.fromRGB(255, 80, 80)
-    elseif blatantMode == "Auto" then
-        color = Color3.fromRGB(255, 180, 100)
-    else
-        color = THEME.SubText
-    end
-    
-    return true, "Blatant: "..blatantMode, color
+local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
+    isBlatant = not isBlatant
+    Config.Blatant = isBlatant
+    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
 end)
-
-local btnColor
-if blatantMode == "On" then
-    btnColor = Color3.fromRGB(255, 80, 80)
-elseif blatantMode == "Auto" then
-    btnColor = Color3.fromRGB(255, 180, 100)
-else
-    btnColor = THEME.SubText
-end
-BlatantBtn.TextColor3 = btnColor
+BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -1835,24 +1769,10 @@ local function KeyDistance(a, b)
 end
 
 local lastKey = nil
-
--- Helper function to check if blatant is active
-local function IsBlatantActive(currentTimer)
-    if blatantMode == "On" then
-        return true
-    elseif blatantMode == "Auto" then
-        if currentTimer and currentTimer < autoBlatantTimer then
-            return true
-        end
-        return false
-    end
-    return false
-end
-
-local function CalculateDelayForKeys(prevChar, nextChar, cpmOverride, currentTimer)
+local function CalculateDelayForKeys(prevChar, nextChar, cpmOverride)
     local activeCPM = cpmOverride or currentCPM
     
-    if IsBlatantActive(currentTimer) then 
+    if isBlatant then 
         return 60 / activeCPM 
     end
 
@@ -1910,7 +1830,7 @@ local function GetKeyCode(char)
     return nil
 end
 
-local function SimulateKey(input, currentTimer)
+local function SimulateKey(input)
     if typeof(input) == "string" and #input == 1 then
          local char = input
          local vimSuccess = pcall(function()
@@ -1943,7 +1863,7 @@ local function SimulateKey(input, currentTimer)
 
     if key then
         local baseHold = math.clamp(12 / currentCPM, 0.015, 0.05)
-        local hold = IsBlatantActive(currentTimer) and 0.002 or (baseHold + (math.random() * 0.01) - 0.005)
+        local hold = isBlatant and 0.002 or (baseHold + (math.random() * 0.01) - 0.005)
 
         local vimSuccess = pcall(function()
             VirtualInputManager:SendKeyEvent(true, key, false, game)
@@ -2024,18 +1944,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
     local panicCPM = currentCPM
     local panicErrorRate = errorRate
     
-    -- Check Auto Blatant Mode
-    local isAutoBlatantActive = blatantMode == "Auto" and currentTimer and currentTimer < autoBlatantTimer
-    
     if useHumanization and currentTimer and currentTimer < panicTimerThreshold then
         isPanicMode = true
         panicCPM = 1100
         panicErrorRate = 0
         StatusText.Text = "PANIC MODE ACTIVE!"
         StatusText.TextColor3 = Color3.fromRGB(255, 100, 50)
-    elseif isAutoBlatantActive then
-        StatusText.Text = "AUTO BLATANT ACTIVE!"
-        StatusText.TextColor3 = Color3.fromRGB(255, 180, 100)
     end
     
     local targetBox = GetGameTextBox()
@@ -2044,7 +1958,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
         task.wait(0.1)
     end
     
-    if not isPanicMode and not isAutoBlatantActive then
+    if not isPanicMode then
         StatusText.Text = "Typing..."
         StatusText.TextColor3 = THEME.Accent
     end
@@ -2076,8 +1990,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                     if not GetTurnInfo() then break end
                 end
                 local ch = toType:sub(i, i)
-                SimulateKey(ch, currentTimer)
-                task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil, currentTimer))
+                SimulateKey(ch)
+                task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                 lastKey = ch
                 if useHumanization and not isPanicMode and math.random() < 0.03 then
                     task.wait(0.15 + math.random() * 0.45)
@@ -2173,26 +2087,26 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                         local idx = math.random(1, #letters)
                         typoChar = letters:sub(idx, idx)
                     until typoChar ~= ch
-                    SimulateKey(typoChar, currentTimer)
+                    SimulateKey(typoChar)
                     
                     if riskyMistakes then
                          task.wait(0.05 + math.random() * 0.1)
                          PressEnter()
                     end
 
-                    task.wait(CalculateDelayForKeys(lastKey, typoChar, isPanicMode and panicCPM or nil, currentTimer))
+                    task.wait(CalculateDelayForKeys(lastKey, typoChar, isPanicMode and panicCPM or nil))
                     lastKey = typoChar
                     local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
                     task.wait(realize)
-                    SimulateKey(Enum.KeyCode.Backspace, currentTimer)
+                    SimulateKey(Enum.KeyCode.Backspace)
                     lastKey = nil
                     task.wait(0.05 + math.random() * 0.08)
-                    SimulateKey(ch, currentTimer)
-                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil, currentTimer))
+                    SimulateKey(ch)
+                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                     lastKey = ch
                 else
-                    SimulateKey(ch, currentTimer)
-                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil, currentTimer))
+                    SimulateKey(ch)
+                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                     lastKey = ch
                 end
                 if useHumanization and not isPanicMode and math.random() < 0.03 then
@@ -2637,7 +2551,7 @@ UpdateList = function(detectedText, requiredLetter)
 end
 
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
-    local max = (blatantMode == "On" or blatantMode == "Auto") and MAX_CPM_BLATANT or MAX_CPM_LEGIT
+    local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
     SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
@@ -2965,7 +2879,7 @@ runConn = RunService.RenderStepped:Connect(function()
                 local snapshotSeconds = seconds
                 
                 task.spawn(function()
-                    local delay = IsBlatantActive(snapshotSeconds) and 0.15 or (0.8 + math.random() * 0.5)
+                    local delay = isBlatant and 0.15 or (0.8 + math.random() * 0.5)
                     task.wait(delay)
                     
                     -- Re-check timer before typing
