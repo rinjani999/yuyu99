@@ -64,7 +64,9 @@ local Config = {
     MinTypeSpeed = 50,
     MaxTypeSpeed = 3000,
     KeyboardLayout = "QWERTY",
-    PanicTimerThreshold = 3
+    PanicTimerThreshold = 3,
+    AutoBlatant = false,
+    AutoBlatantTimer = 5
 }
 
 local function SaveConfig()
@@ -99,6 +101,8 @@ local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
 local panicTimerThreshold = Config.PanicTimerThreshold or 3
+local autoBlatant = Config.AutoBlatant or false
+local autoBlatantTimer = Config.AutoBlatantTimer or 5
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -628,12 +632,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -644,12 +648,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 525), Position = UDim2.new(0, 0, 1, -525)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -645)})
         TogglesFrame.Visible = true
     end
 end
@@ -985,6 +989,40 @@ SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
+local AutoBlatantTimerLabel = Instance.new("TextLabel", SlidersFrame)
+AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
+AutoBlatantTimerLabel.Font = Enum.Font.GothamMedium
+AutoBlatantTimerLabel.TextSize = 11
+AutoBlatantTimerLabel.TextColor3 = THEME.SubText
+AutoBlatantTimerLabel.Size = UDim2.new(1, -30, 0, 18)
+AutoBlatantTimerLabel.Position = UDim2.new(0, 15, 0, 114)
+AutoBlatantTimerLabel.BackgroundTransparency = 1
+AutoBlatantTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local AutoBlatantTimerBg = Instance.new("Frame", SlidersFrame)
+AutoBlatantTimerBg.Size = UDim2.new(1, -30, 0, 6)
+AutoBlatantTimerBg.Position = UDim2.new(0, 15, 0, 134)
+AutoBlatantTimerBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", AutoBlatantTimerBg).CornerRadius = UDim.new(1, 0)
+
+local autoBlatantTimerPct = (autoBlatantTimer - 1) / 13
+local AutoBlatantTimerFill = Instance.new("Frame", AutoBlatantTimerBg)
+AutoBlatantTimerFill.Size = UDim2.new(autoBlatantTimerPct, 0, 1, 0)
+AutoBlatantTimerFill.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+Instance.new("UICorner", AutoBlatantTimerFill).CornerRadius = UDim.new(1, 0)
+
+local AutoBlatantTimerBtn = Instance.new("TextButton", AutoBlatantTimerBg)
+AutoBlatantTimerBtn.Size = UDim2.new(1,0,1,0)
+AutoBlatantTimerBtn.BackgroundTransparency = 1
+AutoBlatantTimerBtn.Text = ""
+
+SetupSlider(AutoBlatantTimerBtn, AutoBlatantTimerBg, AutoBlatantTimerFill, function(pct)
+    autoBlatantTimer = math.floor(1 + pct * 13)
+    Config.AutoBlatantTimer = autoBlatantTimer
+    AutoBlatantTimerFill.Size = UDim2.new(pct, 0, 1, 0)
+    AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
+end)
+
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
     btn.Text = text
@@ -1129,6 +1167,14 @@ end)
 RiskyBtn.TextColor3 = riskyMistakes and Color3.fromRGB(255, 80, 80) or THEME.SubText
 RiskyBtn.Size = UDim2.new(0, 130, 0, 24)
 
+local AutoBlatantBtn = CreateToggle("Auto Blatant: "..(autoBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 145), function()
+    autoBlatant = not autoBlatant
+    Config.AutoBlatant = autoBlatant
+    return autoBlatant, "Auto Blatant: "..(autoBlatant and "ON" or "OFF"), autoBlatant and THEME.Success or Color3.fromRGB(255, 100, 100)
+end)
+AutoBlatantBtn.TextColor3 = autoBlatant and THEME.Success or Color3.fromRGB(255, 100, 100)
+AutoBlatantBtn.Size = UDim2.new(0, 265, 0, 24)
+
 local ManageWordsBtn = Instance.new("TextButton", TogglesFrame)
 ManageWordsBtn.Text = "Manage Custom Words"
 ManageWordsBtn.Font = Enum.Font.GothamMedium
@@ -1136,7 +1182,7 @@ ManageWordsBtn.TextSize = 11
 ManageWordsBtn.TextColor3 = THEME.Accent
 ManageWordsBtn.BackgroundColor3 = THEME.Background
 ManageWordsBtn.Size = UDim2.new(0, 130, 0, 24)
-ManageWordsBtn.Position = UDim2.new(0, 15, 0, 145)
+ManageWordsBtn.Position = UDim2.new(0, 15, 0, 175)
 Instance.new("UICorner", ManageWordsBtn).CornerRadius = UDim.new(0, 4)
 
 local WordBrowserBtn = Instance.new("TextButton", TogglesFrame)
@@ -1146,7 +1192,7 @@ WordBrowserBtn.TextSize = 11
 WordBrowserBtn.TextColor3 = Color3.fromRGB(200, 150, 255)
 WordBrowserBtn.BackgroundColor3 = THEME.Background
 WordBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-WordBrowserBtn.Position = UDim2.new(0, 15, 0, 175)
+WordBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
 Instance.new("UICorner", WordBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
@@ -1156,7 +1202,7 @@ ServerBrowserBtn.TextSize = 11
 ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
 ServerBrowserBtn.BackgroundColor3 = THEME.Background
 ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
+ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 235)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ClearUsedWordsBtn = Instance.new("TextButton", TogglesFrame)
@@ -1166,7 +1212,7 @@ ClearUsedWordsBtn.TextSize = 11
 ClearUsedWordsBtn.TextColor3 = Color3.fromRGB(255, 150, 100)
 ClearUsedWordsBtn.BackgroundColor3 = THEME.Background
 ClearUsedWordsBtn.Size = UDim2.new(0, 265, 0, 24)
-ClearUsedWordsBtn.Position = UDim2.new(0, 15, 0, 235)
+ClearUsedWordsBtn.Position = UDim2.new(0, 15, 0, 265)
 Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
@@ -2654,9 +2700,20 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
+
+                if autoBlatant and seconds then
+                    if seconds < autoBlatantTimer then
+                        isBlatant = true
+                    else
+                        isBlatant = Config.Blatant
+                    end
+                end
             end
         else
             StatsData.Frame.Visible = false
+            if autoBlatant then
+                isBlatant = Config.Blatant
+            end
         end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
