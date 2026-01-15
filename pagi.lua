@@ -42,7 +42,7 @@ end
 local ConfigFile = "WordHelper_Config.json"
 local Config = {
     CPM = 550,
-    Blatant = "OFF",
+    Blatant = false,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -63,9 +63,7 @@ local Config = {
     CustomWords = {},
     MinTypeSpeed = 50,
     MaxTypeSpeed = 3000,
-    KeyboardLayout = "QWERTY",
-    HumanizeTimer = 6,
-    BlatantAutoTimer = 6
+    KeyboardLayout = "QWERTY"
 }
 
 local function SaveConfig()
@@ -86,10 +84,6 @@ LoadConfig()
 
 local currentCPM = Config.CPM
 local isBlatant = Config.Blatant
-if type(isBlatant) == "boolean" then
-    isBlatant = isBlatant and "ON" or "OFF"
-    Config.Blatant = isBlatant
-end
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -103,8 +97,6 @@ local errorRate = Config.ErrorRate
 local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
-local humanizeTimer = Config.HumanizeTimer or 6
-local blatantAutoTimer = Config.BlatantAutoTimer or 6
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -134,7 +126,6 @@ local ButtonData = {}
 local JoinDebounce = {}
 local thinkDelayMin = 0.4
 local thinkDelayMax = 1.2
-local isBlatantAutoActive = false
 
 local listUpdatePending = false
 local forceUpdateList = false
@@ -635,12 +626,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 215)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 125)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 215)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 125)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -651,12 +642,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 215), Position = UDim2.new(0, 0, 1, -215)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -335)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 125), Position = UDim2.new(0, 0, 1, -125)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -245)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 555), Position = UDim2.new(0, 0, 1, -555)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -675)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 465), Position = UDim2.new(0, 0, 1, -465)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -585)})
         TogglesFrame.Visible = true
     end
 end
@@ -690,8 +681,6 @@ local function SetupSlider(btn, bg, fill, callback)
             Config.CPM = currentCPM
             Config.ErrorRate = errorRate
             Config.ThinkDelay = thinkDelayCurrent
-            Config.HumanizeTimer = humanizeTimer
-            Config.BlatantAutoTimer = blatantAutoTimer
         end
         Update()
         move = RunService.RenderStepped:Connect(Update)
@@ -960,74 +949,6 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 end)
 
-local HumanizeTimerLabel = Instance.new("TextLabel", SlidersFrame)
-HumanizeTimerLabel.Text = string.format("Humanize Timer: %ds", humanizeTimer)
-HumanizeTimerLabel.Font = Enum.Font.GothamMedium
-HumanizeTimerLabel.TextSize = 11
-HumanizeTimerLabel.TextColor3 = THEME.SubText
-HumanizeTimerLabel.Size = UDim2.new(1, -30, 0, 18)
-HumanizeTimerLabel.Position = UDim2.new(0, 15, 0, 88)
-HumanizeTimerLabel.BackgroundTransparency = 1
-HumanizeTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local HumanizeTimerBg = Instance.new("Frame", SlidersFrame)
-HumanizeTimerBg.Size = UDim2.new(1, -30, 0, 6)
-HumanizeTimerBg.Position = UDim2.new(0, 15, 0, 108)
-HumanizeTimerBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", HumanizeTimerBg).CornerRadius = UDim.new(1, 0)
-
-local HumanizeTimerFill = Instance.new("Frame", HumanizeTimerBg)
-local htPct = (humanizeTimer - 1) / 13
-HumanizeTimerFill.Size = UDim2.new(htPct, 0, 1, 0)
-HumanizeTimerFill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
-Instance.new("UICorner", HumanizeTimerFill).CornerRadius = UDim.new(1, 0)
-
-local HumanizeTimerBtn = Instance.new("TextButton", HumanizeTimerBg)
-HumanizeTimerBtn.Size = UDim2.new(1,0,1,0)
-HumanizeTimerBtn.BackgroundTransparency = 1
-HumanizeTimerBtn.Text = ""
-
-SetupSlider(HumanizeTimerBtn, HumanizeTimerBg, HumanizeTimerFill, function(pct)
-    humanizeTimer = math.floor(1 + pct * 13)
-    Config.HumanizeTimer = humanizeTimer
-    HumanizeTimerFill.Size = UDim2.new(pct, 0, 1, 0)
-    HumanizeTimerLabel.Text = string.format("Humanize Timer: %ds", humanizeTimer)
-end)
-
-local BlatantAutoTimerLabel = Instance.new("TextLabel", SlidersFrame)
-BlatantAutoTimerLabel.Text = string.format("Blatant Auto Timer: %ds", blatantAutoTimer)
-BlatantAutoTimerLabel.Font = Enum.Font.GothamMedium
-BlatantAutoTimerLabel.TextSize = 11
-BlatantAutoTimerLabel.TextColor3 = THEME.SubText
-BlatantAutoTimerLabel.Size = UDim2.new(1, -30, 0, 18)
-BlatantAutoTimerLabel.Position = UDim2.new(0, 15, 0, 114)
-BlatantAutoTimerLabel.BackgroundTransparency = 1
-BlatantAutoTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
-
-local BlatantAutoTimerBg = Instance.new("Frame", SlidersFrame)
-BlatantAutoTimerBg.Size = UDim2.new(1, -30, 0, 6)
-BlatantAutoTimerBg.Position = UDim2.new(0, 15, 0, 134)
-BlatantAutoTimerBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", BlatantAutoTimerBg).CornerRadius = UDim.new(1, 0)
-
-local BlatantAutoTimerFill = Instance.new("Frame", BlatantAutoTimerBg)
-local batPct = (blatantAutoTimer - 1) / 13
-BlatantAutoTimerFill.Size = UDim2.new(batPct, 0, 1, 0)
-BlatantAutoTimerFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-Instance.new("UICorner", BlatantAutoTimerFill).CornerRadius = UDim.new(1, 0)
-
-local BlatantAutoTimerBtn = Instance.new("TextButton", BlatantAutoTimerBg)
-BlatantAutoTimerBtn.Size = UDim2.new(1,0,1,0)
-BlatantAutoTimerBtn.BackgroundTransparency = 1
-BlatantAutoTimerBtn.Text = ""
-
-SetupSlider(BlatantAutoTimerBtn, BlatantAutoTimerBg, BlatantAutoTimerFill, function(pct)
-    blatantAutoTimer = math.floor(1 + pct * 13)
-    Config.BlatantAutoTimer = blatantAutoTimer
-    BlatantAutoTimerFill.Size = UDim2.new(pct, 0, 1, 0)
-    BlatantAutoTimerLabel.Text = string.format("Blatant Auto Timer: %ds", blatantAutoTimer)
-end)
-
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
     btn.Text = text
@@ -1156,24 +1077,12 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant Mode: "..isBlatant, UDim2.new(0, 15, 0, 115), function()
-    if isBlatant == "OFF" then 
-        isBlatant = "ON"
-    elseif isBlatant == "ON" then 
-        isBlatant = "Auto"
-    else 
-        isBlatant = "OFF"
-    end
+local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
+    isBlatant = not isBlatant
     Config.Blatant = isBlatant
-    local color = THEME.SubText
-    if isBlatant == "ON" then color = Color3.fromRGB(255, 80, 80)
-    elseif isBlatant == "Auto" then color = Color3.fromRGB(255, 200, 80) end
-    return true, "Blatant Mode: "..isBlatant, color
+    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
 end)
-local blatantColor = THEME.SubText
-if isBlatant == "ON" then blatantColor = Color3.fromRGB(255, 80, 80)
-elseif isBlatant == "Auto" then blatantColor = Color3.fromRGB(255, 200, 80) end
-BlatantBtn.TextColor3 = blatantColor
+BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -1215,7 +1124,7 @@ ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ClearUsedWordsBtn = Instance.new("TextButton", TogglesFrame)
-ClearUsedWordsBtn.Text = "Clear Used Words"
+ClearUsedWordsBtn.Text = "Clear UsedWords"
 ClearUsedWordsBtn.Font = Enum.Font.GothamMedium
 ClearUsedWordsBtn.TextSize = 11
 ClearUsedWordsBtn.TextColor3 = Color3.fromRGB(255, 150, 100)
@@ -1226,8 +1135,8 @@ Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
     UsedWords = {}
-    ShowToast("Used words cleared!", "success")
-    StatusText.Text = "Used Words Reset"
+    ShowToast("UsedWords cleared!", "success")
+    StatusText.Text = "UsedWords Cleared Manually"
     StatusText.TextColor3 = THEME.Success
     forceUpdateList = true
 end)
@@ -1352,7 +1261,7 @@ local function RefreshCustomWords()
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
             
             row.MouseButton1Click:Connect(function()
-                SmartType(w, lastDetected, true, true, nil)
+                SmartType(w, lastDetected, true, true)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
                      Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
@@ -1753,7 +1662,7 @@ do
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
             
             row.MouseButton1Click:Connect(function()
-                SmartType(w, lastDetected, true, true, nil)
+                SmartType(w, lastDetected, true, true)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
                      Tween(row, {BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
@@ -1825,7 +1734,7 @@ end
 
 local lastKey = nil
 local function CalculateDelayForKeys(prevChar, nextChar)
-    if isBlatant == \"ON\" or isBlatantAutoActive then 
+    if isBlatant then 
         return 60 / currentCPM 
     end
 
@@ -1916,7 +1825,7 @@ local function SimulateKey(input)
 
     if key then
         local baseHold = math.clamp(12 / currentCPM, 0.015, 0.05)
-        local hold = (isBlatant == \"ON\" or isBlatantAutoActive) and 0.002 or (baseHold + (math.random() * 0.01) - 0.005)
+        local hold = isBlatant and 0.002 or (baseHold + (math.random() * 0.01) - 0.005)
 
         local vimSuccess = pcall(function()
             VirtualInputManager:SendKeyEvent(true, key, false, game)
@@ -1975,7 +1884,7 @@ local function GetGameTextBox()
     return UserInputService:GetFocusedTextBox()
 end
 
-local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, currentSeconds)
+local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
     if unloaded then return end
     
     if isTyping then
@@ -1998,44 +1907,12 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
         task.wait(0.1)
     end
     
-    -- Check if humanize auto-correct should activate
-    local useHumanizeCorrect = false
-    local savedErrorRate = errorRate
-    local savedCPM = currentCPM
-    
-    if useHumanization and currentSeconds and currentSeconds < humanizeTimer then
-        useHumanizeCorrect = true
-        errorRate = 0
-        currentCPM = 1100
-        StatusText.Text = "Humanize Auto-Correct!"
-        StatusText.TextColor3 = Color3.fromRGB(100, 255, 140)
-    else
-        StatusText.Text = "Typing..."
-        StatusText.TextColor3 = THEME.Accent
-    end
+    StatusText.Text = "Typing..."
+    StatusText.TextColor3 = THEME.Accent
     Tween(StatusDot, {BackgroundColor3 = THEME.Accent})
 
     local success, err = pcall(function()
         if isCorrection then
-            -- If humanize auto-correct is active, clear all wrong letters first
-            if useHumanizeCorrect and #currentDetected > 0 then
-                -- Check if current detected has errors
-                local hasError = false
-                for i = 1, math.min(#targetWord, #currentDetected) do
-                    if targetWord:sub(i,i) ~= currentDetected:sub(i,i) then
-                        hasError = true
-                        break
-                    end
-                end
-                
-                if hasError then
-                    -- Delete all current text
-                    Backspace(#currentDetected)
-                    task.wait(0.15)
-                    currentDetected = ""
-                end
-            end
-            
             local commonLen = 0
             local minLen = math.min(#targetWord, #currentDetected)
             for i = 1, minLen do
@@ -2063,7 +1940,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                 SimulateKey(ch)
                 task.wait(CalculateDelayForKeys(lastKey, ch))
                 lastKey = ch
-                if not useHumanizeCorrect and useHumanization and math.random() < 0.03 then
+                if useHumanization and math.random() < 0.03 then
                     task.wait(0.15 + math.random() * 0.45)
                 end
             end
@@ -2080,11 +1957,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                      
                      isTyping = false
                      forceUpdateList = true
-                     -- Restore settings
-                     if useHumanizeCorrect then
-                         errorRate = savedErrorRate
-                         currentCPM = savedCPM
-                     end
                      return
                 end
             end
@@ -2126,11 +1998,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                 lastDetected = "---"
                 isTyping = false
                 forceUpdateList = true
-                -- Restore settings
-                if useHumanizeCorrect then
-                    errorRate = savedErrorRate
-                    currentCPM = savedCPM
-                end
                 return
             else
                 StatusText.Text = "Word Cleared (Corrected)"
@@ -2189,7 +2056,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                     task.wait(CalculateDelayForKeys(lastKey, ch))
                     lastKey = ch
                 end
-                if not useHumanizeCorrect and useHumanization and math.random() < 0.03 then
+                if useHumanization and math.random() < 0.03 then
                     task.wait(0.12 + math.random() * 0.5)
                 end
             end
@@ -2283,13 +2150,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             end
         end
     end)
-    
-    -- Restore settings if humanize auto-correct was used
-    if useHumanizeCorrect then
-        errorRate = savedErrorRate
-        currentCPM = savedCPM
-    end
-    
     isTyping = false
     forceUpdateList = true
 end
@@ -2574,7 +2434,7 @@ UpdateList = function(detectedText, requiredLetter)
                 btn.MouseButton1Click:Connect(function()
                     local d = ButtonData[btn]
                     if d then
-                        SmartType(d.word, d.detected, true, false, nil)
+                        SmartType(d.word, d.detected, true)
                         local l = btn:FindFirstChild("Label")
                         if l then l.TextColor3 = THEME.Success end
                         Tween(btn, {BackgroundColor3 = Color3.fromRGB(30,60,40)})
@@ -2628,7 +2488,7 @@ UpdateList = function(detectedText, requiredLetter)
 end
 
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
-    local max = (isBlatant == "ON") and MAX_CPM_BLATANT or MAX_CPM_LEGIT
+    local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
     SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
@@ -2735,31 +2595,6 @@ runConn = RunService.RenderStepped:Connect(function()
         else
             StatsData.Frame.Visible = false
         end
-        
-        -- Blatant Auto Mode Logic
-        if isBlatant == "Auto" and seconds then
-            local isMyTurnCheck, _ = GetTurnInfo(frame)
-            if isMyTurnCheck then
-                if seconds < blatantAutoTimer then
-                    -- Activate blatant mode
-                    if not isBlatantAutoActive then
-                        isBlatantAutoActive = true
-                        local max = MAX_CPM_BLATANT
-                        local pct = (currentCPM - MIN_CPM) / (MAX_CPM_LEGIT - MIN_CPM)
-                        SliderFill.Size = UDim2.new(pct, 0, 1, 0)
-                        Tween(SliderFill, {BackgroundColor3 = Color3.fromRGB(255,80,80)})
-                    end
-                else
-                    -- Deactivate blatant mode
-                    if isBlatantAutoActive then
-                        isBlatantAutoActive = false
-                        Tween(SliderFill, {BackgroundColor3 = THEME.Accent})
-                    end
-                end
-            end
-        else
-            isBlatantAutoActive = false
-        end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
         
@@ -2787,7 +2622,7 @@ runConn = RunService.RenderStepped:Connect(function()
                 if bestWord then
                     StatusText.Text = "PANIC SAVE!"
                     StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-                    SmartType(bestWord, detected, false, false, seconds)
+                    SmartType(bestWord, detected, false)
                 end
             end
         end
@@ -2978,15 +2813,14 @@ runConn = RunService.RenderStepped:Connect(function()
                 isAutoPlayScheduled = true
                 local targetWord = currentBestMatch
                 local snapshotDetected = lastDetected
-                local currentSeconds = seconds
                 
                 task.spawn(function()
-                    local delay = (isBlatant == "ON" or isBlatantAutoActive) and 0.15 or (0.8 + math.random() * 0.5)
+                    local delay = isBlatant and 0.15 or (0.8 + math.random() * 0.5)
                     task.wait(delay)
                     
                     local stillMyTurn, _ = GetTurnInfo()
                     if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
-                         SmartType(targetWord, snapshotDetected, false, false, currentSeconds)
+                         SmartType(targetWord, snapshotDetected, false)
                     end
                     isAutoPlayScheduled = false
                 end)
