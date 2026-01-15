@@ -138,6 +138,10 @@ local forceUpdateList = false
 local lastInputTime = 0
 local LIST_DEBOUNCE = 0.05
 local currentBestMatch = nil
+local lastSeconds = nil
+local lastSecondsChangeTime = 0
+local lastIsVisible = false
+
 
 if logConn then logConn:Disconnect() end
 logConn = LogService.MessageOut:Connect(function(message, type)
@@ -2722,6 +2726,36 @@ runConn = RunService.RenderStepped:Connect(function()
                 isBlatant = false
             end
         end
+
+        -- Reset UsedWords if round ended
+        if lastIsVisible and not isVisible then
+            UsedWords = {}
+            StatusText.Text = "Round Ended - Words Reset"
+            StatusText.TextColor3 = THEME.Success
+            forceUpdateList = true
+        end
+        lastIsVisible = isVisible
+
+        -- Reset UsedWords if timer is not moving
+        if isVisible and seconds then
+            if seconds ~= lastSeconds then
+                lastSeconds = seconds
+                lastSecondsChangeTime = now
+            else
+                if (now - lastSecondsChangeTime) > 3 then
+                    if next(UsedWords) ~= nil then
+                        UsedWords = {}
+                        StatusText.Text = "Timer Stalled - Words Reset"
+                        StatusText.TextColor3 = THEME.Success
+                        forceUpdateList = true
+                    end
+                end
+            end
+        else
+            lastSeconds = nil
+            lastSecondsChangeTime = now
+        end
+
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
         
