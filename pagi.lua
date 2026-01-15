@@ -243,7 +243,8 @@ LoadList(fileName)
 if LoadingGui then LoadingGui:Destroy() end
 
 table.sort(Words)
-Buckets = {}
+table.sort(Words)
+local Buckets = {}
 for _, w in ipairs(Words) do
     local c = w:sub(1,1) or ""
     if c == "" then c = "#" end
@@ -709,7 +710,7 @@ ExpandBtn.MouseButton1Click:Connect(function()
     UpdateLayout()
 end)
 
-local function SetupSlider(btn, bg, fill, callback)
+local function SetupCustomSlider(btn, bg, fill, callback)
     btn.MouseButton1Down:Connect(function()
         local move, rel
         local function Update()
@@ -947,7 +948,7 @@ ErrorBtn.Size = UDim2.new(1,0,1,0)
 ErrorBtn.BackgroundTransparency = 1
 ErrorBtn.Text = ""
 
-SetupSlider(ErrorBtn, ErrorBg, ErrorFill, function(pct)
+SetupCustomSlider(ErrorBtn, ErrorBg, ErrorFill, function(pct)
     errorRate = math.floor(pct * 30)
     Config.ErrorRate = errorRate
     ErrorFill.Size = UDim2.new(pct, 0, 1, 0)
@@ -981,7 +982,7 @@ ThinkBtn.Size = UDim2.new(1,0,1,0)
 ThinkBtn.BackgroundTransparency = 1
 ThinkBtn.Text = ""
 
-SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
+SetupCustomSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     thinkDelayCurrent = thinkDelayMin + pct * (thinkDelayMax - thinkDelayMin)
     Config.ThinkDelay = thinkDelayCurrent
     ThinkFill.Size = UDim2.new(pct, 0, 1, 0)
@@ -1015,7 +1016,7 @@ PanicTimerBtn.Size = UDim2.new(1,0,1,0)
 PanicTimerBtn.BackgroundTransparency = 1
 PanicTimerBtn.Text = ""
 
-SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
+SetupCustomSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     panicTimerThreshold = math.floor(1 + pct * 13)
     Config.PanicTimerThreshold = panicTimerThreshold
     PanicTimerFill.Size = UDim2.new(pct, 0, 1, 0)
@@ -1049,7 +1050,7 @@ BlatantTimerBtn.Size = UDim2.new(1,0,1,0)
 BlatantTimerBtn.BackgroundTransparency = 1
 BlatantTimerBtn.Text = ""
 
-SetupSlider(BlatantTimerBtn, BlatantTimerBg, BlatantTimerFill, function(pct)
+SetupCustomSlider(BlatantTimerBtn, BlatantTimerBg, BlatantTimerFill, function(pct)
     blatantAutoThreshold = math.floor(1 + pct * 13)
     Config.BlatantAutoThreshold = blatantAutoThreshold
     BlatantTimerFill.Size = UDim2.new(pct, 0, 1, 0)
@@ -2635,7 +2636,7 @@ UpdateList = function(detectedText, requiredLetter)
     ScrollList.CanvasSize = UDim2.new(0,0,0, UIListLayout.AbsoluteContentSize.Y)
 end
 
-SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
+SetupCustomSlider(SliderBtn, SliderBg, SliderFill, function(pct)
     local max = IsBlatantActive() and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
