@@ -2628,7 +2628,7 @@ UpdateList = function(detectedText, requiredLetter)
 end
 
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
-    local max = (isBlatant == "ON" or isBlatantAutoActive) and MAX_CPM_BLATANT or MAX_CPM_LEGIT
+    local max = (isBlatant == "ON") and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
     SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
@@ -2978,6 +2978,7 @@ runConn = RunService.RenderStepped:Connect(function()
                 isAutoPlayScheduled = true
                 local targetWord = currentBestMatch
                 local snapshotDetected = lastDetected
+                local currentSeconds = seconds
                 
                 task.spawn(function()
                     local delay = (isBlatant == "ON" or isBlatantAutoActive) and 0.15 or (0.8 + math.random() * 0.5)
@@ -2985,7 +2986,7 @@ runConn = RunService.RenderStepped:Connect(function()
                     
                     local stillMyTurn, _ = GetTurnInfo()
                     if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
-                         SmartType(targetWord, snapshotDetected, false, false, seconds)
+                         SmartType(targetWord, snapshotDetected, false, false, currentSeconds)
                     end
                     isAutoPlayScheduled = false
                 end)
