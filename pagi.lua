@@ -42,7 +42,8 @@ end
 local ConfigFile = "WordHelper_Config.json"
 local Config = {
     CPM = 550,
-    Blatant = false,
+    Blatant = "OFF",
+    BlatantThreshold = 6,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -83,8 +84,10 @@ local function LoadConfig()
 end
 LoadConfig()
 
-local currentCPM = Config.CPM
-local isBlatant = Config.Blatant
+local blatantMode = Config.Blatant or "OFF"
+if type(blatantMode) == "boolean" then blatantMode = blatantMode and "ON" or "OFF" end
+local isBlatant = (blatantMode == "ON")
+local blatantThreshold = Config.BlatantThreshold or 6
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -628,12 +631,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -644,12 +647,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 525), Position = UDim2.new(0, 0, 1, -525)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -645)})
         TogglesFrame.Visible = true
     end
 end
@@ -985,6 +988,40 @@ SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
+local BlatantThresholdLabel = Instance.new("TextLabel", SlidersFrame)
+BlatantThresholdLabel.Text = string.format("Blatant Auto: %ds", blatantThreshold)
+BlatantThresholdLabel.Font = Enum.Font.GothamMedium
+BlatantThresholdLabel.TextSize = 11
+BlatantThresholdLabel.TextColor3 = THEME.SubText
+BlatantThresholdLabel.Size = UDim2.new(1, -30, 0, 18)
+BlatantThresholdLabel.Position = UDim2.new(0, 15, 0, 114)
+BlatantThresholdLabel.BackgroundTransparency = 1
+BlatantThresholdLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local BlatantThresholdBg = Instance.new("Frame", SlidersFrame)
+BlatantThresholdBg.Size = UDim2.new(1, -30, 0, 6)
+BlatantThresholdBg.Position = UDim2.new(0, 15, 0, 134)
+BlatantThresholdBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", BlatantThresholdBg).CornerRadius = UDim.new(1, 0)
+
+local blatantThresholdPct = (blatantThreshold - 1) / 13
+local BlatantThresholdFill = Instance.new("Frame", BlatantThresholdBg)
+BlatantThresholdFill.Size = UDim2.new(blatantThresholdPct, 0, 1, 0)
+BlatantThresholdFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+Instance.new("UICorner", BlatantThresholdFill).CornerRadius = UDim.new(1, 0)
+
+local BlatantThresholdBtn = Instance.new("TextButton", BlatantThresholdBg)
+BlatantThresholdBtn.Size = UDim2.new(1,0,1,0)
+BlatantThresholdBtn.BackgroundTransparency = 1
+BlatantThresholdBtn.Text = ""
+
+SetupSlider(BlatantThresholdBtn, BlatantThresholdBg, BlatantThresholdFill, function(pct)
+    blatantThreshold = math.floor(1 + pct * 13)
+    Config.BlatantThreshold = blatantThreshold
+    BlatantThresholdFill.Size = UDim2.new(pct, 0, 1, 0)
+    BlatantThresholdLabel.Text = string.format("Blatant Auto: %ds", blatantThreshold)
+end)
+
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
     btn.Text = text
@@ -1113,12 +1150,22 @@ CreateCheckbox("1v1", UDim2.new(0, 15, 0, 88), "_1v1")
 CreateCheckbox("4 Player", UDim2.new(0, 110, 0, 88), "_4p")
 CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
-local BlatantBtn = CreateToggle("Blatant Mode: "..(isBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 115), function()
-    isBlatant = not isBlatant
-    Config.Blatant = isBlatant
-    return isBlatant, "Blatant Mode: "..(isBlatant and "ON" or "OFF"), isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
+local BlatantBtn = CreateToggle("Blatant: "..blatantMode, UDim2.new(0, 15, 0, 115), function()
+    if blatantMode == "OFF" then blatantMode = "ON"
+    elseif blatantMode == "ON" then blatantMode = "AUTO"
+    else blatantMode = "OFF" end
+    
+    Config.Blatant = blatantMode
+    if blatantMode == "ON" then isBlatant = true
+    elseif blatantMode == "OFF" then isBlatant = false end
+    
+    local color = THEME.SubText
+    if blatantMode == "ON" then color = Color3.fromRGB(255, 80, 80)
+    elseif blatantMode == "AUTO" then color = Color3.fromRGB(255, 150, 50) end
+    
+    return blatantMode, "Blatant: "..blatantMode, color
 end)
-BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
+BlatantBtn.TextColor3 = (blatantMode == "ON" and Color3.fromRGB(255, 80, 80)) or (blatantMode == "AUTO" and Color3.fromRGB(255, 150, 50)) or THEME.SubText
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -2654,9 +2701,19 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
+
+                -- Blatant Auto Logic
+                if blatantMode == "AUTO" then
+                    if seconds and seconds < blatantThreshold then
+                        isBlatant = true
+                    else
+                        isBlatant = false
+                    end
+                end
             end
         else
             StatsData.Frame.Visible = false
+            if blatantMode == "AUTO" then isBlatant = false end
         end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
