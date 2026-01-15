@@ -124,6 +124,8 @@ local lastAutoJoinCheck = 0
 local lastWordCheck = 0
 local cachedDetected = ""
 local cachedCensored = false
+local lastTimerValue = nil
+local lastTimerChangeTime = 0
 local LOGIC_RATE = 0.1
 local AUTO_JOIN_RATE = 0.5
 local UpdateList
@@ -2698,6 +2700,25 @@ runConn = RunService.RenderStepped:Connect(function()
                 local timeText = timerLbl.Text
                 seconds = tonumber(timeText:match("([%d%.]+)"))
                 
+                if seconds then
+                    if seconds ~= lastTimerValue then
+                        lastTimerValue = seconds
+                        lastTimerChangeTime = now
+                    elseif (now - lastTimerChangeTime) > 2 then
+                        if next(UsedWords) then
+                            UsedWords = {}
+                            ShowToast("Timer stuck! UsedWords cleared.", "warning")
+                            StatusText.Text = "Timer Stuck - UsedWords Cleared"
+                            StatusText.TextColor3 = THEME.Warning
+                            forceUpdateList = true
+                            lastDetected = "---"
+                        end
+                        lastTimerChangeTime = now
+                    end
+                else
+                    lastTimerValue = nil
+                end
+                
                 -- Auto Blatant Logic
                 if blatantMode == "ON" then
                     isBlatant = true
@@ -2718,6 +2739,7 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         else
             StatsData.Frame.Visible = false
+            lastTimerValue = nil
             if blatantMode == "Auto" then
                 isBlatant = false
             end
