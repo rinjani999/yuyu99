@@ -780,7 +780,10 @@ local function GenerateKeyboard()
         end
     end
     local space = CreateKey(" ", UDim2.new(0.5, -100, 0, startY + 3*35), UDim2.new(0, 200, 0, 30))
-    space.FindFirstChild(space, "TextLabel").Text = "SPACE"
+    local spaceLabel = space:FindFirstChild("TextLabel")
+    if spaceLabel then
+        spaceLabel.Text = "SPACE"
+    end
 end
 
 GenerateKeyboard()
