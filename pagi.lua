@@ -1224,10 +1224,13 @@ Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
     UsedWords = {}
     lastDetected = "---"
+    lastRequiredLetter = ""
+    isMyTurnLogDetected = false
+    logRequiredLetters = ""
+    ShowToast("UsedWords cleared!", "success")
     StatusText.Text = "Waiting..."
     StatusText.TextColor3 = THEME.SubText
     forceUpdateList = true
-    ShowToast("UsedWords cleared!", "success")
 end)
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
@@ -2731,9 +2734,8 @@ runConn = RunService.RenderStepped:Connect(function()
         -- Reset UsedWords if round ended
         if lastIsVisible and not isVisible then
             UsedWords = {}
-            lastDetected = "---"
-            StatusText.Text = "Waiting..."
-            StatusText.TextColor3 = THEME.SubText
+            StatusText.Text = "Round Ended - Words Reset"
+            StatusText.TextColor3 = THEME.Success
             forceUpdateList = true
         end
         lastIsVisible = isVisible
@@ -2747,9 +2749,8 @@ runConn = RunService.RenderStepped:Connect(function()
                 if (now - lastSecondsChangeTime) > 3 then
                     if next(UsedWords) ~= nil then
                         UsedWords = {}
-                        lastDetected = "---"
-                        StatusText.Text = "Waiting..."
-                        StatusText.TextColor3 = THEME.SubText
+                        StatusText.Text = "Timer Stalled - Words Reset"
+                        StatusText.TextColor3 = THEME.Success
                         forceUpdateList = true
                     end
                 end
@@ -2875,10 +2876,8 @@ runConn = RunService.RenderStepped:Connect(function()
         local typeVisible = typeLbl and typeLbl.Visible
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
-            lastDetected = "---"
-            StatusText.Text = "Waiting..."
-            StatusText.TextColor3 = THEME.SubText
-            forceUpdateList = true
+            StatusText.Text = "New Round - Words Reset"
+            StatusText.TextColor3 = THEME.Success
         end
         lastTypeVisible = typeVisible
         if censored then
