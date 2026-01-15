@@ -2627,8 +2627,6 @@ end)
 
 local lastTypeVisible = false
 local lastRequiredLetter = ""
-local lastTimerValue = 0
-local lastTimerChangeTime = tick()
 
 local StatsData = {}
 
@@ -2831,34 +2829,11 @@ runConn = RunService.RenderStepped:Connect(function()
         end
 
         local typeLbl = frame and frame:FindFirstChild("Type")
-        local typeVisible = (typeLbl and typeLbl.Visible) or false
-        
-        local timerStuck = false
-        if isVisible and seconds then
-            if seconds ~= lastTimerValue then
-                lastTimerValue = seconds
-                lastTimerChangeTime = tick()
-            elseif (tick() - lastTimerChangeTime) > 2 then
-                timerStuck = true
-            end
-        else
-            lastTimerValue = 0
-            lastTimerChangeTime = tick()
-        end
-
+        local typeVisible = typeLbl and typeLbl.Visible
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
             StatusText.Text = "New Round - Words Reset"
             StatusText.TextColor3 = THEME.Success
-            forceUpdateList = true
-            lastTimerChangeTime = tick()
-        elseif (not typeVisible and lastTypeVisible) or (timerStuck and lastTypeVisible) then
-            UsedWords = {}
-            ShowToast("Automatic Clear Used Word Success", "success")
-            StatusText.Text = "Round Ended - Words Reset"
-            StatusText.TextColor3 = THEME.Success
-            forceUpdateList = true
-            typeVisible = false -- Force state change to prevent re-triggering
         end
         lastTypeVisible = typeVisible
         if censored then
@@ -2986,9 +2961,6 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
     end)
-    if not success then
-        warn("WordHelper Loop Error: " .. tostring(err))
-    end
 end)
 
 inputConn = UserInputService.InputBegan:Connect(function(input)
