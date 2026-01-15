@@ -1,3 +1,5 @@
+--[[ BAGIAN 1: Services, Config, Loading, & Main UI Setup ]]
+
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
@@ -39,10 +41,12 @@ local function ColorToRGB(c)
     return string.format("%d,%d,%d", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
 end
 
-local ConfigFile = "WordHelper_Config.json"
+local ConfigFile = "WordHelper_Config_V4_Custom.json" -- Ganti nama file agar config baru tidak konflik
 local Config = {
     CPM = 550,
     Blatant = false,
+    AutoBlatant = false, -- Fitur Baru
+    AutoBlatantTimer = 5, -- Fitur Baru (Default 5s)
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -64,9 +68,7 @@ local Config = {
     MinTypeSpeed = 50,
     MaxTypeSpeed = 3000,
     KeyboardLayout = "QWERTY",
-    PanicTimerThreshold = 3,
-    AutoBlatant = false,
-    AutoBlatantTimer = 5
+    PanicTimerThreshold = 3
 }
 
 local function SaveConfig()
@@ -87,6 +89,8 @@ LoadConfig()
 
 local currentCPM = Config.CPM
 local isBlatant = Config.Blatant
+local autoBlatant = Config.AutoBlatant or false -- Variable Lokal Baru
+local autoBlatantTimer = Config.AutoBlatantTimer or 5 -- Variable Lokal Baru
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -101,8 +105,6 @@ local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
 local panicTimerThreshold = Config.PanicTimerThreshold or 3
-local autoBlatant = Config.AutoBlatant or false
-local autoBlatantTimer = Config.AutoBlatantTimer or 5
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -626,17 +628,21 @@ local UIListLayout = Instance.new("UIListLayout", ScrollList)
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 4)
 
+--[[ AKHIR BAGIAN 1 ]]
+
+--[[ BAGIAN 2: Settings UI, Sliders (New Auto Blatant Timer), & Toggles ]]
+
 local SettingsFrame = Instance.new("Frame", MainFrame)
 SettingsFrame.BackgroundColor3 = THEME.ItemBG
 SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 185) -- Diperbesar untuk slider baru
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
-TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
+TogglesFrame.Size = UDim2.new(1, 0, 0, 380) -- Diperbesar
 TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
@@ -648,12 +654,14 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
+        -- Collapsed state
         Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 525), Position = UDim2.new(0, 0, 1, -525)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -645)})
+        -- Expanded state (Adjusted height for new buttons)
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 545), Position = UDim2.new(0, 0, 1, -545)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -665)})
         TogglesFrame.Visible = true
     end
 end
@@ -862,6 +870,9 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- SLIDERS --
+
+-- 1. Speed
 local SliderLabel = Instance.new("TextLabel", SlidersFrame)
 SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
 SliderLabel.Font = Enum.Font.GothamMedium
@@ -888,6 +899,7 @@ SliderBtn.Size = UDim2.new(1,0,1,0)
 SliderBtn.BackgroundTransparency = 1
 SliderBtn.Text = ""
 
+-- 2. Error Rate
 local ErrorLabel = Instance.new("TextLabel", SlidersFrame)
 ErrorLabel.Text = "Error Rate: " .. errorRate .. "%"
 ErrorLabel.Font = Enum.Font.GothamMedium
@@ -921,6 +933,7 @@ SetupSlider(ErrorBtn, ErrorBg, ErrorFill, function(pct)
     ErrorLabel.Text = "Error Rate: " .. errorRate .. "% (per-letter)"
 end)
 
+-- 3. Think Delay
 local ThinkLabel = Instance.new("TextLabel", SlidersFrame)
 ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 ThinkLabel.Font = Enum.Font.GothamMedium
@@ -955,6 +968,7 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
 end)
 
+-- 4. Panic Timer
 local PanicTimerLabel = Instance.new("TextLabel", SlidersFrame)
 PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 PanicTimerLabel.Font = Enum.Font.GothamMedium
@@ -989,39 +1003,42 @@ SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
-local AutoBlatantTimerLabel = Instance.new("TextLabel", SlidersFrame)
-AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
-AutoBlatantTimerLabel.Font = Enum.Font.GothamMedium
-AutoBlatantTimerLabel.TextSize = 11
-AutoBlatantTimerLabel.TextColor3 = THEME.SubText
-AutoBlatantTimerLabel.Size = UDim2.new(1, -30, 0, 18)
-AutoBlatantTimerLabel.Position = UDim2.new(0, 15, 0, 114)
-AutoBlatantTimerLabel.BackgroundTransparency = 1
-AutoBlatantTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- 5. Auto Blatant Timer (NEW)
+local ABTimerLabel = Instance.new("TextLabel", SlidersFrame)
+ABTimerLabel.Text = string.format("Auto Blatant: < %ds", autoBlatantTimer)
+ABTimerLabel.Font = Enum.Font.GothamMedium
+ABTimerLabel.TextSize = 11
+ABTimerLabel.TextColor3 = THEME.SubText
+ABTimerLabel.Size = UDim2.new(1, -30, 0, 18)
+ABTimerLabel.Position = UDim2.new(0, 15, 0, 114)
+ABTimerLabel.BackgroundTransparency = 1
+ABTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-local AutoBlatantTimerBg = Instance.new("Frame", SlidersFrame)
-AutoBlatantTimerBg.Size = UDim2.new(1, -30, 0, 6)
-AutoBlatantTimerBg.Position = UDim2.new(0, 15, 0, 134)
-AutoBlatantTimerBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", AutoBlatantTimerBg).CornerRadius = UDim.new(1, 0)
+local ABTimerBg = Instance.new("Frame", SlidersFrame)
+ABTimerBg.Size = UDim2.new(1, -30, 0, 6)
+ABTimerBg.Position = UDim2.new(0, 15, 0, 134)
+ABTimerBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", ABTimerBg).CornerRadius = UDim.new(1, 0)
 
-local autoBlatantTimerPct = (autoBlatantTimer - 1) / 13
-local AutoBlatantTimerFill = Instance.new("Frame", AutoBlatantTimerBg)
-AutoBlatantTimerFill.Size = UDim2.new(autoBlatantTimerPct, 0, 1, 0)
-AutoBlatantTimerFill.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-Instance.new("UICorner", AutoBlatantTimerFill).CornerRadius = UDim.new(1, 0)
+local abTimerPct = (autoBlatantTimer - 1) / 13
+local ABTimerFill = Instance.new("Frame", ABTimerBg)
+ABTimerFill.Size = UDim2.new(abTimerPct, 0, 1, 0)
+ABTimerFill.BackgroundColor3 = Color3.fromRGB(255, 100, 255)
+Instance.new("UICorner", ABTimerFill).CornerRadius = UDim.new(1, 0)
 
-local AutoBlatantTimerBtn = Instance.new("TextButton", AutoBlatantTimerBg)
-AutoBlatantTimerBtn.Size = UDim2.new(1,0,1,0)
-AutoBlatantTimerBtn.BackgroundTransparency = 1
-AutoBlatantTimerBtn.Text = ""
+local ABTimerBtn = Instance.new("TextButton", ABTimerBg)
+ABTimerBtn.Size = UDim2.new(1,0,1,0)
+ABTimerBtn.BackgroundTransparency = 1
+ABTimerBtn.Text = ""
 
-SetupSlider(AutoBlatantTimerBtn, AutoBlatantTimerBg, AutoBlatantTimerFill, function(pct)
+SetupSlider(ABTimerBtn, ABTimerBg, ABTimerFill, function(pct)
     autoBlatantTimer = math.floor(1 + pct * 13)
     Config.AutoBlatantTimer = autoBlatantTimer
-    AutoBlatantTimerFill.Size = UDim2.new(pct, 0, 1, 0)
-    AutoBlatantTimerLabel.Text = string.format("Auto Blatant: %ds", autoBlatantTimer)
+    ABTimerFill.Size = UDim2.new(pct, 0, 1, 0)
+    ABTimerLabel.Text = string.format("Auto Blatant: < %ds", autoBlatantTimer)
 end)
+
+-- TOGGLES --
 
 local function CreateToggle(text, pos, callback)
     local btn = Instance.new("TextButton", TogglesFrame)
@@ -1167,13 +1184,14 @@ end)
 RiskyBtn.TextColor3 = riskyMistakes and Color3.fromRGB(255, 80, 80) or THEME.SubText
 RiskyBtn.Size = UDim2.new(0, 130, 0, 24)
 
+-- NEW AUTO BLATANT TOGGLE
 local AutoBlatantBtn = CreateToggle("Auto Blatant: "..(autoBlatant and "ON" or "OFF"), UDim2.new(0, 15, 0, 145), function()
     autoBlatant = not autoBlatant
     Config.AutoBlatant = autoBlatant
-    return autoBlatant, "Auto Blatant: "..(autoBlatant and "ON" or "OFF"), autoBlatant and THEME.Success or Color3.fromRGB(255, 100, 100)
+    return autoBlatant, "Auto Blatant: "..(autoBlatant and "ON" or "OFF"), autoBlatant and Color3.fromRGB(255, 100, 255) or THEME.SubText
 end)
-AutoBlatantBtn.TextColor3 = autoBlatant and THEME.Success or Color3.fromRGB(255, 100, 100)
-AutoBlatantBtn.Size = UDim2.new(0, 265, 0, 24)
+AutoBlatantBtn.TextColor3 = autoBlatant and Color3.fromRGB(255, 100, 255) or THEME.SubText
+AutoBlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local ManageWordsBtn = Instance.new("TextButton", TogglesFrame)
 ManageWordsBtn.Text = "Manage Custom Words"
@@ -1182,7 +1200,7 @@ ManageWordsBtn.TextSize = 11
 ManageWordsBtn.TextColor3 = THEME.Accent
 ManageWordsBtn.BackgroundColor3 = THEME.Background
 ManageWordsBtn.Size = UDim2.new(0, 130, 0, 24)
-ManageWordsBtn.Position = UDim2.new(0, 15, 0, 175)
+ManageWordsBtn.Position = UDim2.new(0, 15, 0, 175) -- Shifted down
 Instance.new("UICorner", ManageWordsBtn).CornerRadius = UDim.new(0, 4)
 
 local WordBrowserBtn = Instance.new("TextButton", TogglesFrame)
@@ -1192,7 +1210,7 @@ WordBrowserBtn.TextSize = 11
 WordBrowserBtn.TextColor3 = Color3.fromRGB(200, 150, 255)
 WordBrowserBtn.BackgroundColor3 = THEME.Background
 WordBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-WordBrowserBtn.Position = UDim2.new(0, 15, 0, 205)
+WordBrowserBtn.Position = UDim2.new(0, 15, 0, 205) -- Shifted down
 Instance.new("UICorner", WordBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ServerBrowserBtn = Instance.new("TextButton", TogglesFrame)
@@ -1202,7 +1220,7 @@ ServerBrowserBtn.TextSize = 11
 ServerBrowserBtn.TextColor3 = Color3.fromRGB(100, 200, 255)
 ServerBrowserBtn.BackgroundColor3 = THEME.Background
 ServerBrowserBtn.Size = UDim2.new(0, 265, 0, 24)
-ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 235)
+ServerBrowserBtn.Position = UDim2.new(0, 15, 0, 235) -- Shifted down
 Instance.new("UICorner", ServerBrowserBtn).CornerRadius = UDim.new(0, 4)
 
 local ClearUsedWordsBtn = Instance.new("TextButton", TogglesFrame)
@@ -1212,16 +1230,23 @@ ClearUsedWordsBtn.TextSize = 11
 ClearUsedWordsBtn.TextColor3 = Color3.fromRGB(255, 150, 100)
 ClearUsedWordsBtn.BackgroundColor3 = THEME.Background
 ClearUsedWordsBtn.Size = UDim2.new(0, 265, 0, 24)
-ClearUsedWordsBtn.Position = UDim2.new(0, 15, 0, 265)
+ClearUsedWordsBtn.Position = UDim2.new(0, 15, 0, 265) -- Shifted down
 Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 
+-- MODIFIED CLEAR LOGIC
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
     UsedWords = {}
     ShowToast("UsedWords cleared!", "success")
-    StatusText.Text = "UsedWords Cleared Manually"
-    StatusText.TextColor3 = THEME.Success
+    -- Perubahan: Reset status ke Waiting agar list update
+    StatusText.Text = "Waiting..." 
+    StatusText.TextColor3 = THEME.SubText
+    lastDetected = "---"
     forceUpdateList = true
 end)
+
+--[[ AKHIR BAGIAN 2 ]]
+
+--[[ BAGIAN 3: Custom Words, Browsers, Input Simulation, & SmartType ]]
 
 local CustomWordsFrame = Instance.new("Frame", ScreenGui)
 CustomWordsFrame.Name = "CustomWordsFrame"
@@ -1346,7 +1371,7 @@ local function RefreshCustomWords()
                 SmartType(w, lastDetected, true, true, nil)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
-                     Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+                      Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
                 end)
             end)
             
@@ -1360,8 +1385,6 @@ local function RefreshCustomWords()
             lbl.BackgroundTransparency = 1
             lbl.TextXAlignment = Enum.TextXAlignment.Left
 
-            -- Removed nested invisible button to fix click handling
-            
             local del = Instance.new("TextButton", row)
             del.Text = "X"
             del.Font = Enum.Font.GothamBold
@@ -1747,7 +1770,7 @@ do
                 SmartType(w, lastDetected, true, true)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
-                     Tween(row, {BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
+                      Tween(row, {BackgroundColor3 = (i % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
                 end)
             end)
             
@@ -1760,8 +1783,6 @@ do
             lbl.Position = UDim2.new(0, 5, 0, 0)
             lbl.BackgroundTransparency = 1
             lbl.TextXAlignment = Enum.TextXAlignment.Left
-
-            -- Removed nested invisible button to fix click handling
         end
         
         WBList.CanvasSize = UDim2.new(0,0,0, WBLayout.AbsoluteContentSize.Y)
@@ -1866,10 +1887,7 @@ local function GetKeyCode(char)
             if char == "q" then return Enum.KeyCode.A end
             if char == "z" then return Enum.KeyCode.W end
             if char == "w" then return Enum.KeyCode.Z end
-            if char == "m" then return Enum.KeyCode.Semicolon end -- M is often next to L
-            -- NOTE: AZERTY is tricky because M can vary, but standard AZERTY FR places M right of L (where semi-colon is on QWERTY)
-            -- However, many games might use scan codes where M is actually comma or something else depending on the specific AZERTY variant.
-            -- For standard AZERTY (France), M is indeed usually where ; is.
+            if char == "m" then return Enum.KeyCode.Semicolon end 
         end
         return Enum.KeyCode[char:upper()]
     end
@@ -1884,7 +1902,6 @@ local function SimulateKey(input)
          end)
          
          if not vimSuccess then
-             -- Fallback for executors that don't support SendTextInput or for keycodes
              local key
              pcall(function() key = GetKeyCode(input) end)
              if not key then pcall(function() key = Enum.KeyCode[input:upper()] end) end
@@ -2031,7 +2048,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             local toType = targetWord:sub(commonLen + 1)
             for i = 1, #toType do
                 if not bypassTurn and not GetTurnInfo() then
-                    -- Double check if turn info is just flickering
                     task.wait(0.05)
                     if not GetTurnInfo() then break end
                 end
@@ -2044,19 +2060,18 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                 end
             end
 
-            -- Pre-submission verify
             local finalCheck = GetGameTextBox()
             if not riskyMistakes then
                 task.wait(0.1)
                 finalCheck = GetGameTextBox()
                 if finalCheck and finalCheck.Text ~= targetWord then
-                     StatusText.Text = "Typing mismatch detected!"
-                     StatusText.TextColor3 = THEME.Warning
-                     Backspace(#finalCheck.Text)
-                     
-                     isTyping = false
-                     forceUpdateList = true
-                     return
+                      StatusText.Text = "Typing mismatch detected!"
+                      StatusText.TextColor3 = THEME.Warning
+                      Backspace(#finalCheck.Text)
+                      
+                      isTyping = false
+                      forceUpdateList = true
+                      return
                 end
             end
 
@@ -2068,8 +2083,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             while (tick() - verifyStart) < 1.5 do
                 local currentCheck = GetCurrentGameWord()
                 if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
-                     accepted = true
-                     break
+                      accepted = true
+                      break
                 end
                 task.wait(0.05)
             end
@@ -2122,9 +2137,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             local letters = "abcdefghijklmnopqrstuvwxyz"
             for i = 1, #missingPart do
                 if not bypassTurn and not GetTurnInfo() then
-                     -- Double check if turn info is just flickering
-                     task.wait(0.05)
-                     if not GetTurnInfo() then break end
+                      task.wait(0.05)
+                      if not GetTurnInfo() then break end
                 end
                 local ch = missingPart:sub(i, i)
                 if panicErrorRate > 0 and (math.random() < (panicErrorRate / 100)) then
@@ -2160,9 +2174,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                 end
             end
 
-            -- Pre-submission verify
             if not riskyMistakes then
-                -- Wait a moment for last character to register
                 task.wait(0.1)
                 local finalCheck = GetGameTextBox()
                 if finalCheck and finalCheck.Text ~= targetWord then
@@ -2172,7 +2184,6 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                     
                     isTyping = false
                     forceUpdateList = true
-                    -- Return without blacklisting
                     return
                 end
             end
@@ -2185,8 +2196,8 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
             while (tick() - verifyStart) < 1.5 do
                 local currentCheck = GetCurrentGameWord()
                 if currentCheck == "" or (currentCheck ~= targetWord and currentCheck ~= currentDetected) then
-                     accepted = true
-                     break
+                      accepted = true
+                      break
                 end
                 task.wait(0.05)
             end
@@ -2195,17 +2206,17 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
                 
                 local postCheck = GetGameTextBox()
                 if postCheck and postCheck.Text == targetWord then
-                     StatusText.Text = "Enter failed? Retrying..."
-                     PressEnter()
-                     task.wait(0.5)
-                     if GetCurrentGameWord() == currentDetected then
-                         StatusText.Text = "Submission Failed (Lag?)"
-                         StatusText.TextColor3 = THEME.Warning
-                         Backspace(#targetWord)
-                         isTyping = false
-                         forceUpdateList = true
-                         return
-                     end
+                      StatusText.Text = "Enter failed? Retrying..."
+                      PressEnter()
+                      task.wait(0.5)
+                      if GetCurrentGameWord() == currentDetected then
+                          StatusText.Text = "Submission Failed (Lag?)"
+                          StatusText.TextColor3 = THEME.Warning
+                          Backspace(#targetWord)
+                          isTyping = false
+                          forceUpdateList = true
+                          return
+                      end
                 end
 
                 Blacklist[targetWord] = true
@@ -2252,6 +2263,10 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, 
     isTyping = false
     forceUpdateList = true
 end
+
+--[[ AKHIR BAGIAN 3 ]]
+
+--[[ BAGIAN 4: Matching Logic, Main Loop (Auto Blatant), & Input Handling ]]
 
 local function GetMatchLength(str, prefix)
     local len = 0
@@ -2344,7 +2359,7 @@ UpdateList = function(detectedText, requiredLetter)
                 if not tryFallbackLengths and lengthMode > 0 then
                     isLengthMatch = (#w == lengthMode)
                 elseif tryFallbackLengths and lengthMode > 0 then
-                     isLengthMatch = true
+                      isLengthMatch = true
                 end
                 
                 if not isLengthMatch then return end
@@ -2653,6 +2668,7 @@ do
     StatsData.Timer = st
 
     local sc = Instance.new("TextLabel")
+    st.Size = UDim2.new(1, 0, 0, 25)
     sc.Size = UDim2.new(1, 0, 0, 20)
     sc.Position = UDim2.new(0, 0, 0, 30)
     sc.BackgroundTransparency = 1
@@ -2700,20 +2716,32 @@ runConn = RunService.RenderStepped:Connect(function()
                 StatsData.Timer.Text = timeText
                 if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
                 else StatsData.Timer.TextColor3 = THEME.Text end
-
-                if autoBlatant and seconds then
-                    if seconds < autoBlatantTimer then
-                        isBlatant = true
-                    else
-                        isBlatant = Config.Blatant
-                    end
-                end
             end
         else
             StatsData.Frame.Visible = false
-            if autoBlatant then
-                isBlatant = Config.Blatant
+        end
+
+        -- LOGIKA AUTO BLATANT --
+        if autoBlatant and seconds then
+            if seconds < autoBlatantTimer then
+                -- Aktifkan Blatant jika waktu kurang dari timer
+                isBlatant = true
+                -- Opsional: Indikator visual kecil
+                BlatantBtn.TextColor3 = Color3.fromRGB(255, 100, 255)
+            else
+                -- Matikan Blatant jika waktu masih banyak (kecuali Manual Blatant ON)
+                if not Config.Blatant then
+                    isBlatant = false
+                    BlatantBtn.TextColor3 = THEME.SubText
+                else
+                    isBlatant = true
+                    BlatantBtn.TextColor3 = Color3.fromRGB(255, 80, 80)
+                end
             end
+        else
+            -- Jika fitur Auto mati, ikut setting manual
+            isBlatant = Config.Blatant
+            BlatantBtn.TextColor3 = isBlatant and Color3.fromRGB(255, 80, 80) or THEME.SubText
         end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
@@ -2953,7 +2981,7 @@ runConn = RunService.RenderStepped:Connect(function()
                     
                     local stillMyTurn, _ = GetTurnInfo()
                     if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
-                         SmartType(targetWord, snapshotDetected, false, false, currentSeconds)
+                          SmartType(targetWord, snapshotDetected, false, false, currentSeconds)
                     end
                     isAutoPlayScheduled = false
                 end)
