@@ -472,7 +472,7 @@ end
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 500)
+MainFrame.Size = UDim2.new(0, 300, 0, 550)
 MainFrame.Position = UDim2.new(0.8, -50, 0.4, 0)
 MainFrame.BackgroundColor3 = THEME.Background
 MainFrame.BorderSizePixel = 0
@@ -632,12 +632,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -648,12 +648,13 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
+        ScrollList.Visible = true
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 500), Position = UDim2.new(0, 0, 1, -500)})
+        ScrollList.Visible = false
         TogglesFrame.Visible = true
     end
 end
@@ -2615,7 +2616,7 @@ MinBtn.MouseButton1Click:Connect(function()
         StatusFrame.Visible = false
         MinBtn.Text = "+"
     else
-        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 500)})
+        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 550)})
         task.wait(0.2)
         ScrollList.Visible = true
         SettingsFrame.Visible = true
