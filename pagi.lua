@@ -63,7 +63,8 @@ local Config = {
     CustomWords = {},
     MinTypeSpeed = 50,
     MaxTypeSpeed = 3000,
-    KeyboardLayout = "QWERTY"
+    KeyboardLayout = "QWERTY",
+    PanicTimerThreshold = 3
 }
 
 local function SaveConfig()
@@ -97,6 +98,7 @@ local errorRate = Config.ErrorRate
 local thinkDelayCurrent = Config.ThinkDelay
 local riskyMistakes = Config.RiskyMistakes
 local keyboardLayout = Config.KeyboardLayout or "QWERTY"
+local panicTimerThreshold = Config.PanicTimerThreshold or 3
 
 local isTyping = false
 local isAutoPlayScheduled = false
@@ -626,12 +628,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 125)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 125)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -642,12 +644,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 125), Position = UDim2.new(0, 0, 1, -125)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -245)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 465), Position = UDim2.new(0, 0, 1, -465)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -585)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
         TogglesFrame.Visible = true
     end
 end
@@ -947,6 +949,40 @@ SetupSlider(ThinkBtn, ThinkBg, ThinkFill, function(pct)
     Config.ThinkDelay = thinkDelayCurrent
     ThinkFill.Size = UDim2.new(pct, 0, 1, 0)
     ThinkLabel.Text = string.format("Think: %.2fs", thinkDelayCurrent)
+end)
+
+local PanicTimerLabel = Instance.new("TextLabel", SlidersFrame)
+PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
+PanicTimerLabel.Font = Enum.Font.GothamMedium
+PanicTimerLabel.TextSize = 11
+PanicTimerLabel.TextColor3 = THEME.SubText
+PanicTimerLabel.Size = UDim2.new(1, -30, 0, 18)
+PanicTimerLabel.Position = UDim2.new(0, 15, 0, 88)
+PanicTimerLabel.BackgroundTransparency = 1
+PanicTimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local PanicTimerBg = Instance.new("Frame", SlidersFrame)
+PanicTimerBg.Size = UDim2.new(1, -30, 0, 6)
+PanicTimerBg.Position = UDim2.new(0, 15, 0, 108)
+PanicTimerBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", PanicTimerBg).CornerRadius = UDim.new(1, 0)
+
+local panicTimerPct = (panicTimerThreshold - 1) / 13
+local PanicTimerFill = Instance.new("Frame", PanicTimerBg)
+PanicTimerFill.Size = UDim2.new(panicTimerPct, 0, 1, 0)
+PanicTimerFill.BackgroundColor3 = Color3.fromRGB(255, 150, 100)
+Instance.new("UICorner", PanicTimerFill).CornerRadius = UDim.new(1, 0)
+
+local PanicTimerBtn = Instance.new("TextButton", PanicTimerBg)
+PanicTimerBtn.Size = UDim2.new(1,0,1,0)
+PanicTimerBtn.BackgroundTransparency = 1
+PanicTimerBtn.Text = ""
+
+SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
+    panicTimerThreshold = math.floor(1 + pct * 13)
+    Config.PanicTimerThreshold = panicTimerThreshold
+    PanicTimerFill.Size = UDim2.new(pct, 0, 1, 0)
+    PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
 local function CreateToggle(text, pos, callback)
@@ -1261,7 +1297,7 @@ local function RefreshCustomWords()
             Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
             
             row.MouseButton1Click:Connect(function()
-                SmartType(w, lastDetected, true, true)
+                SmartType(w, lastDetected, true, true, nil)
                 Tween(row, {BackgroundColor3 = THEME.Accent}, 0.2)
                 task.delay(0.2, function()
                      Tween(row, {BackgroundColor3 = (shownCount % 2 == 0) and Color3.fromRGB(25,25,30) or Color3.fromRGB(30,30,35)}, 0.2)
@@ -1733,12 +1769,14 @@ local function KeyDistance(a, b)
 end
 
 local lastKey = nil
-local function CalculateDelayForKeys(prevChar, nextChar)
+local function CalculateDelayForKeys(prevChar, nextChar, cpmOverride)
+    local activeCPM = cpmOverride or currentCPM
+    
     if isBlatant then 
-        return 60 / currentCPM 
+        return 60 / activeCPM 
     end
 
-    local charsPerMin = currentCPM
+    local charsPerMin = activeCPM
     local baseDelay = 60 / charsPerMin
     
     local variance = baseDelay * 0.35
@@ -1746,7 +1784,7 @@ local function CalculateDelayForKeys(prevChar, nextChar)
     
     if useHumanization and useFingerModel and prevChar and nextChar and prevChar ~= "" then
         local dist = KeyDistance(prevChar, nextChar)
-        extra = dist * 0.018 * (550 / math.max(150, currentCPM))
+        extra = dist * 0.018 * (550 / math.max(150, activeCPM))
         
         local pa = KEY_POS[prevChar:lower()]
         local pb = KEY_POS[nextChar:lower()]
@@ -1884,7 +1922,7 @@ local function GetGameTextBox()
     return UserInputService:GetFocusedTextBox()
 end
 
-local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
+local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn, currentTimer)
     if unloaded then return end
     
     if isTyping then
@@ -1901,14 +1939,29 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
     isTyping = true
     lastTypingStart = tick()
     
+    -- Panic Mode Logic
+    local isPanicMode = false
+    local panicCPM = currentCPM
+    local panicErrorRate = errorRate
+    
+    if useHumanization and currentTimer and currentTimer < panicTimerThreshold then
+        isPanicMode = true
+        panicCPM = 1100
+        panicErrorRate = 0
+        StatusText.Text = "PANIC MODE ACTIVE!"
+        StatusText.TextColor3 = Color3.fromRGB(255, 100, 50)
+    end
+    
     local targetBox = GetGameTextBox()
     if targetBox then
         targetBox:CaptureFocus()
         task.wait(0.1)
     end
     
-    StatusText.Text = "Typing..."
-    StatusText.TextColor3 = THEME.Accent
+    if not isPanicMode then
+        StatusText.Text = "Typing..."
+        StatusText.TextColor3 = THEME.Accent
+    end
     Tween(StatusDot, {BackgroundColor3 = THEME.Accent})
 
     local success, err = pcall(function()
@@ -1938,9 +1991,9 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                 end
                 local ch = toType:sub(i, i)
                 SimulateKey(ch)
-                task.wait(CalculateDelayForKeys(lastKey, ch))
+                task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                 lastKey = ch
-                if useHumanization and math.random() < 0.03 then
+                if useHumanization and not isPanicMode and math.random() < 0.03 then
                     task.wait(0.15 + math.random() * 0.45)
                 end
             end
@@ -2028,7 +2081,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                      if not GetTurnInfo() then break end
                 end
                 local ch = missingPart:sub(i, i)
-                if errorRate > 0 and (math.random() < (errorRate / 100)) then
+                if panicErrorRate > 0 and (math.random() < (panicErrorRate / 100)) then
                     local typoChar
                     repeat
                         local idx = math.random(1, #letters)
@@ -2041,7 +2094,7 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                          PressEnter()
                     end
 
-                    task.wait(CalculateDelayForKeys(lastKey, typoChar))
+                    task.wait(CalculateDelayForKeys(lastKey, typoChar, isPanicMode and panicCPM or nil))
                     lastKey = typoChar
                     local realize = thinkDelayCurrent * (0.6 + math.random() * 0.8)
                     task.wait(realize)
@@ -2049,14 +2102,14 @@ local function SmartType(targetWord, currentDetected, isCorrection, bypassTurn)
                     lastKey = nil
                     task.wait(0.05 + math.random() * 0.08)
                     SimulateKey(ch)
-                    task.wait(CalculateDelayForKeys(lastKey, ch))
+                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                     lastKey = ch
                 else
                     SimulateKey(ch)
-                    task.wait(CalculateDelayForKeys(lastKey, ch))
+                    task.wait(CalculateDelayForKeys(lastKey, ch, isPanicMode and panicCPM or nil))
                     lastKey = ch
                 end
-                if useHumanization and math.random() < 0.03 then
+                if useHumanization and not isPanicMode and math.random() < 0.03 then
                     task.wait(0.12 + math.random() * 0.5)
                 end
             end
@@ -2434,7 +2487,17 @@ UpdateList = function(detectedText, requiredLetter)
                 btn.MouseButton1Click:Connect(function()
                     local d = ButtonData[btn]
                     if d then
-                        SmartType(d.word, d.detected, true)
+                        local player = Players.LocalPlayer
+                        local gui = player and player:FindFirstChild("PlayerGui")
+                        local inGame = gui and gui:FindFirstChild("InGame")
+                        local frame = inGame and inGame:FindFirstChild("Frame")
+                        local circle = frame and frame:FindFirstChild("Circle")
+                        local timerLbl = circle and circle:FindFirstChild("Timer") and circle.Timer:FindFirstChild("Seconds")
+                        local currentSeconds = nil
+                        if timerLbl then
+                            currentSeconds = tonumber(timerLbl.Text:match("([%d%.]+)"))
+                        end
+                        SmartType(d.word, d.detected, true, false, currentSeconds)
                         local l = btn:FindFirstChild("Label")
                         if l then l.TextColor3 = THEME.Success end
                         Tween(btn, {BackgroundColor3 = Color3.fromRGB(30,60,40)})
@@ -2622,7 +2685,7 @@ runConn = RunService.RenderStepped:Connect(function()
                 if bestWord then
                     StatusText.Text = "PANIC SAVE!"
                     StatusText.TextColor3 = Color3.fromRGB(255, 50, 50)
-                    SmartType(bestWord, detected, false)
+                    SmartType(bestWord, detected, false, false, seconds)
                 end
             end
         end
@@ -2813,14 +2876,27 @@ runConn = RunService.RenderStepped:Connect(function()
                 isAutoPlayScheduled = true
                 local targetWord = currentBestMatch
                 local snapshotDetected = lastDetected
+                local snapshotSeconds = seconds
                 
                 task.spawn(function()
                     local delay = isBlatant and 0.15 or (0.8 + math.random() * 0.5)
                     task.wait(delay)
                     
+                    -- Re-check timer before typing
+                    local player = Players.LocalPlayer
+                    local gui = player and player:FindFirstChild("PlayerGui")
+                    local inGame = gui and gui:FindFirstChild("InGame")
+                    local frame2 = inGame and inGame:FindFirstChild("Frame")
+                    local circle = frame2 and frame2:FindFirstChild("Circle")
+                    local timerLbl = circle and circle:FindFirstChild("Timer") and circle.Timer:FindFirstChild("Seconds")
+                    local currentSeconds = snapshotSeconds
+                    if timerLbl then
+                        currentSeconds = tonumber(timerLbl.Text:match("([%d%.]+)")) or snapshotSeconds
+                    end
+                    
                     local stillMyTurn, _ = GetTurnInfo()
                     if autoPlay and not isTyping and GetCurrentGameWord() == snapshotDetected and stillMyTurn then
-                         SmartType(targetWord, snapshotDetected, false)
+                         SmartType(targetWord, snapshotDetected, false, false, currentSeconds)
                     end
                     isAutoPlayScheduled = false
                 end)
