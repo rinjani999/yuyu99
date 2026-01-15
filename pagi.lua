@@ -84,6 +84,7 @@ local function LoadConfig()
 end
 LoadConfig()
 
+local currentCPM = Config.CPM
 local blatantMode = Config.Blatant or "OFF"
 if type(blatantMode) == "boolean" then blatantMode = blatantMode and "ON" or "OFF" end
 local isBlatant = (blatantMode == "ON")
@@ -471,7 +472,7 @@ end
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 500)
+MainFrame.Size = UDim2.new(0, 300, 0, 550)
 MainFrame.Position = UDim2.new(0.8, -50, 0.4, 0)
 MainFrame.BackgroundColor3 = THEME.Background
 MainFrame.BorderSizePixel = 0
@@ -614,7 +615,7 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local ScrollList = Instance.new("ScrollingFrame", MainFrame)
-ScrollList.Size = UDim2.new(1, -10, 1, -220)
+ScrollList.Size = UDim2.new(1, -10, 1, -305)
 ScrollList.Position = UDim2.new(0, 5, 0, 115)
 ScrollList.BackgroundTransparency = 1
 ScrollList.ScrollBarThickness = 3
@@ -651,8 +652,8 @@ local function UpdateLayout()
         Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 525), Position = UDim2.new(0, 0, 1, -525)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -645)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 540), Position = UDim2.new(0, 0, 1, -540)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -550)})
         TogglesFrame.Visible = true
     end
 end
@@ -2615,7 +2616,7 @@ MinBtn.MouseButton1Click:Connect(function()
         StatusFrame.Visible = false
         MinBtn.Text = "+"
     else
-        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 500)})
+        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 550)})
         task.wait(0.2)
         ScrollList.Visible = true
         SettingsFrame.Visible = true
