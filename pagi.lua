@@ -1223,13 +1223,10 @@ Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
     UsedWords = {}
-    lastDetected = "---"
-    lastRequiredLetter = ""
-    isMyTurnLogDetected = false
-    logRequiredLetters = ""
     ShowToast("UsedWords cleared!", "success")
     StatusText.Text = "Waiting..."
     StatusText.TextColor3 = THEME.SubText
+    lastDetected = "---"
     forceUpdateList = true
 end)
 
@@ -2746,11 +2743,12 @@ runConn = RunService.RenderStepped:Connect(function()
                 lastSeconds = seconds
                 lastSecondsChangeTime = now
             else
-                if (now - lastSecondsChangeTime) > 3 then
-                    if next(UsedWords) ~= nil then
+                if (now - lastSecondsChangeTime) > 2 then
+                    if StatusText.Text ~= "Waiting..." or next(UsedWords) ~= nil then
                         UsedWords = {}
-                        StatusText.Text = "Timer Stalled - Words Reset"
-                        StatusText.TextColor3 = THEME.Success
+                        StatusText.Text = "Waiting..."
+                        StatusText.TextColor3 = THEME.SubText
+                        lastDetected = "---"
                         forceUpdateList = true
                     end
                 end
