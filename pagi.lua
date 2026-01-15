@@ -141,9 +141,6 @@ local currentBestMatch = nil
 local lastSeconds = nil
 local lastSecondsChangeTime = 0
 local lastIsVisible = false
-local lastTypeVisible = false
-local lastRequiredLetter = ""
-local Buckets = {}
 
 
 if logConn then logConn:Disconnect() end
@@ -209,7 +206,7 @@ local function FetchWords()
     end)
     
     if success and res and res.Body then
-        if writefile then writefile(fileName, res.Body) end
+        writefile(fileName, res.Body)
         UpdateStatus("Fetched successfully!", THEME.Success)
     else
         UpdateStatus("Fetch failed! Using cached.", Color3.fromRGB(255, 80, 80))
@@ -224,7 +221,7 @@ local SeenWords = {}
 
 local function LoadList(fname)
     UpdateStatus("Parsing word list...", THEME.Warning)
-    if isfile and isfile(fname) then
+    if isfile(fname) then
         local content = readfile(fname)
         for w in content:gmatch("[^\r\n]+") do
             local clean = w:gsub("[%s%c]+", ""):lower()
@@ -1227,9 +1224,8 @@ Instance.new("UICorner", ClearUsedWordsBtn).CornerRadius = UDim.new(0, 4)
 ClearUsedWordsBtn.MouseButton1Click:Connect(function()
     UsedWords = {}
     ShowToast("UsedWords cleared!", "success")
-    StatusText.Text = "Waiting..."
-    StatusText.TextColor3 = THEME.SubText
-    lastDetected = "---"
+    StatusText.Text = "UsedWords Cleared Manually"
+    StatusText.TextColor3 = THEME.Success
     forceUpdateList = true
 end)
 
@@ -2633,6 +2629,9 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+local lastTypeVisible = false
+local lastRequiredLetter = ""
+
 local StatsData = {}
 
 do
@@ -2743,12 +2742,11 @@ runConn = RunService.RenderStepped:Connect(function()
                 lastSeconds = seconds
                 lastSecondsChangeTime = now
             else
-                if (now - lastSecondsChangeTime) > 2 then
-                    if StatusText.Text ~= "Waiting..." or next(UsedWords) ~= nil then
+                if (now - lastSecondsChangeTime) > 3 then
+                    if next(UsedWords) ~= nil then
                         UsedWords = {}
-                        StatusText.Text = "Waiting..."
-                        StatusText.TextColor3 = THEME.SubText
-                        lastDetected = "---"
+                        StatusText.Text = "Timer Stalled - Words Reset"
+                        StatusText.TextColor3 = THEME.Success
                         forceUpdateList = true
                     end
                 end
@@ -2843,7 +2841,7 @@ runConn = RunService.RenderStepped:Connect(function()
                                         end
                                     end
                                     
-                                    if not clicked and fireclickdetector then
+                                    if not clicked then
                                         local cd = joinBtn:FindFirstChildWhichIsA("ClickDetector")
                                         if cd then
                                             fireclickdetector(cd)
