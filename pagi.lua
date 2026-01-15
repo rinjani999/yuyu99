@@ -141,6 +141,9 @@ local currentBestMatch = nil
 local lastSeconds = nil
 local lastSecondsChangeTime = 0
 local lastIsVisible = false
+local lastTypeVisible = false
+local lastRequiredLetter = ""
+local Buckets = {}
 
 
 if logConn then logConn:Disconnect() end
@@ -206,7 +209,7 @@ local function FetchWords()
     end)
     
     if success and res and res.Body then
-        writefile(fileName, res.Body)
+        if writefile then writefile(fileName, res.Body) end
         UpdateStatus("Fetched successfully!", THEME.Success)
     else
         UpdateStatus("Fetch failed! Using cached.", Color3.fromRGB(255, 80, 80))
@@ -221,7 +224,7 @@ local SeenWords = {}
 
 local function LoadList(fname)
     UpdateStatus("Parsing word list...", THEME.Warning)
-    if isfile(fname) then
+    if isfile and isfile(fname) then
         local content = readfile(fname)
         for w in content:gmatch("[^\r\n]+") do
             local clean = w:gsub("[%s%c]+", ""):lower()
@@ -2630,9 +2633,6 @@ MinBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-local lastTypeVisible = false
-local lastRequiredLetter = ""
-
 local StatsData = {}
 
 do
@@ -2843,7 +2843,7 @@ runConn = RunService.RenderStepped:Connect(function()
                                         end
                                     end
                                     
-                                    if not clicked then
+                                    if not clicked and fireclickdetector then
                                         local cd = joinBtn:FindFirstChildWhichIsA("ClickDetector")
                                         if cd then
                                             fireclickdetector(cd)
