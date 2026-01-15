@@ -42,8 +42,9 @@ end
 local ConfigFile = "WordHelper_Config.json"
 local Config = {
     CPM = 550,
-    Blatant = "OFF",
-    BlatantThreshold = 6,
+    Blatant = false,
+    BlatantMode = "OFF",
+    AutoBlatantThreshold = 6,
     Humanize = true,
     FingerModel = true,
     SortMode = "Random",
@@ -85,10 +86,9 @@ end
 LoadConfig()
 
 local currentCPM = Config.CPM
-local blatantMode = Config.Blatant or "OFF"
-if type(blatantMode) == "boolean" then blatantMode = blatantMode and "ON" or "OFF" end
+local blatantMode = Config.BlatantMode or (Config.Blatant and "ON" or "OFF")
+local autoBlatantThreshold = Config.AutoBlatantThreshold or 6
 local isBlatant = (blatantMode == "ON")
-local blatantThreshold = Config.BlatantThreshold or 6
 local useHumanization = Config.Humanize
 local useFingerModel = Config.FingerModel
 local sortMode = Config.SortMode
@@ -472,7 +472,7 @@ end
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 300, 0, 550)
+MainFrame.Size = UDim2.new(0, 300, 0, 500)
 MainFrame.Position = UDim2.new(0.8, -50, 0.4, 0)
 MainFrame.BackgroundColor3 = THEME.Background
 MainFrame.BorderSizePixel = 0
@@ -615,7 +615,7 @@ SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local ScrollList = Instance.new("ScrollingFrame", MainFrame)
-ScrollList.Size = UDim2.new(1, -10, 1, -305)
+ScrollList.Size = UDim2.new(1, -10, 1, -220)
 ScrollList.Position = UDim2.new(0, 5, 0, 115)
 ScrollList.BackgroundTransparency = 1
 ScrollList.ScrollBarThickness = 3
@@ -632,12 +632,12 @@ SettingsFrame.BorderSizePixel = 0
 SettingsFrame.ClipsDescendants = true
 
 local SlidersFrame = Instance.new("Frame", SettingsFrame)
-SlidersFrame.Size = UDim2.new(1, 0, 0, 185)
+SlidersFrame.Size = UDim2.new(1, 0, 0, 155)
 SlidersFrame.BackgroundTransparency = 1
 
 local TogglesFrame = Instance.new("Frame", SettingsFrame)
 TogglesFrame.Size = UDim2.new(1, 0, 0, 340)
-TogglesFrame.Position = UDim2.new(0, 0, 0, 185)
+TogglesFrame.Position = UDim2.new(0, 0, 0, 155)
 TogglesFrame.BackgroundTransparency = 1
 TogglesFrame.Visible = false
 
@@ -648,12 +648,12 @@ sep.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 local settingsCollapsed = true
 local function UpdateLayout()
     if settingsCollapsed then
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 185), Position = UDim2.new(0, 0, 1, -185)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -305)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 155), Position = UDim2.new(0, 0, 1, -155)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -275)})
         TogglesFrame.Visible = false
     else
-        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 540), Position = UDim2.new(0, 0, 1, -540)})
-        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -550)})
+        Tween(SettingsFrame, {Size = UDim2.new(1, 0, 0, 495), Position = UDim2.new(0, 0, 1, -495)})
+        Tween(ScrollList, {Size = UDim2.new(1, -10, 1, -615)})
         TogglesFrame.Visible = true
     end
 end
@@ -989,38 +989,38 @@ SetupSlider(PanicTimerBtn, PanicTimerBg, PanicTimerFill, function(pct)
     PanicTimerLabel.Text = string.format("Panic Timer: %ds", panicTimerThreshold)
 end)
 
-local BlatantThresholdLabel = Instance.new("TextLabel", SlidersFrame)
-BlatantThresholdLabel.Text = string.format("Blatant Auto: %ds", blatantThreshold)
-BlatantThresholdLabel.Font = Enum.Font.GothamMedium
-BlatantThresholdLabel.TextSize = 11
-BlatantThresholdLabel.TextColor3 = THEME.SubText
-BlatantThresholdLabel.Size = UDim2.new(1, -30, 0, 18)
-BlatantThresholdLabel.Position = UDim2.new(0, 15, 0, 114)
-BlatantThresholdLabel.BackgroundTransparency = 1
-BlatantThresholdLabel.TextXAlignment = Enum.TextXAlignment.Left
+local AutoBlatantLabel = Instance.new("TextLabel", SlidersFrame)
+AutoBlatantLabel.Text = string.format("Auto Blatant: %ds", autoBlatantThreshold)
+AutoBlatantLabel.Font = Enum.Font.GothamMedium
+AutoBlatantLabel.TextSize = 11
+AutoBlatantLabel.TextColor3 = THEME.SubText
+AutoBlatantLabel.Size = UDim2.new(1, -30, 0, 18)
+AutoBlatantLabel.Position = UDim2.new(0, 15, 0, 114)
+AutoBlatantLabel.BackgroundTransparency = 1
+AutoBlatantLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-local BlatantThresholdBg = Instance.new("Frame", SlidersFrame)
-BlatantThresholdBg.Size = UDim2.new(1, -30, 0, 6)
-BlatantThresholdBg.Position = UDim2.new(0, 15, 0, 134)
-BlatantThresholdBg.BackgroundColor3 = THEME.Slider
-Instance.new("UICorner", BlatantThresholdBg).CornerRadius = UDim.new(1, 0)
+local AutoBlatantBg = Instance.new("Frame", SlidersFrame)
+AutoBlatantBg.Size = UDim2.new(1, -30, 0, 6)
+AutoBlatantBg.Position = UDim2.new(0, 15, 0, 134)
+AutoBlatantBg.BackgroundColor3 = THEME.Slider
+Instance.new("UICorner", AutoBlatantBg).CornerRadius = UDim.new(1, 0)
 
-local blatantThresholdPct = (blatantThreshold - 1) / 13
-local BlatantThresholdFill = Instance.new("Frame", BlatantThresholdBg)
-BlatantThresholdFill.Size = UDim2.new(blatantThresholdPct, 0, 1, 0)
-BlatantThresholdFill.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
-Instance.new("UICorner", BlatantThresholdFill).CornerRadius = UDim.new(1, 0)
+local autoBlatantPct = (autoBlatantThreshold - 1) / 13
+local AutoBlatantFill = Instance.new("Frame", AutoBlatantBg)
+AutoBlatantFill.Size = UDim2.new(autoBlatantPct, 0, 1, 0)
+AutoBlatantFill.BackgroundColor3 = THEME.Accent
+Instance.new("UICorner", AutoBlatantFill).CornerRadius = UDim.new(1, 0)
 
-local BlatantThresholdBtn = Instance.new("TextButton", BlatantThresholdBg)
-BlatantThresholdBtn.Size = UDim2.new(1,0,1,0)
-BlatantThresholdBtn.BackgroundTransparency = 1
-BlatantThresholdBtn.Text = ""
+local AutoBlatantBtn = Instance.new("TextButton", AutoBlatantBg)
+AutoBlatantBtn.Size = UDim2.new(1,0,1,0)
+AutoBlatantBtn.BackgroundTransparency = 1
+AutoBlatantBtn.Text = ""
 
-SetupSlider(BlatantThresholdBtn, BlatantThresholdBg, BlatantThresholdFill, function(pct)
-    blatantThreshold = math.floor(1 + pct * 13)
-    Config.BlatantThreshold = blatantThreshold
-    BlatantThresholdFill.Size = UDim2.new(pct, 0, 1, 0)
-    BlatantThresholdLabel.Text = string.format("Blatant Auto: %ds", blatantThreshold)
+SetupSlider(AutoBlatantBtn, AutoBlatantBg, AutoBlatantFill, function(pct)
+    autoBlatantThreshold = math.floor(1 + pct * 13)
+    Config.AutoBlatantThreshold = autoBlatantThreshold
+    AutoBlatantFill.Size = UDim2.new(pct, 0, 1, 0)
+    AutoBlatantLabel.Text = string.format("Auto Blatant: %ds", autoBlatantThreshold)
 end)
 
 local function CreateToggle(text, pos, callback)
@@ -1153,20 +1153,19 @@ CreateCheckbox("8 Player", UDim2.new(0, 205, 0, 88), "_8p")
 
 local BlatantBtn = CreateToggle("Blatant: "..blatantMode, UDim2.new(0, 15, 0, 115), function()
     if blatantMode == "OFF" then blatantMode = "ON"
-    elseif blatantMode == "ON" then blatantMode = "AUTO"
+    elseif blatantMode == "ON" then blatantMode = "Auto"
     else blatantMode = "OFF" end
     
-    Config.Blatant = blatantMode
-    if blatantMode == "ON" then isBlatant = true
-    elseif blatantMode == "OFF" then isBlatant = false end
+    Config.BlatantMode = blatantMode
+    isBlatant = (blatantMode == "ON")
     
     local color = THEME.SubText
     if blatantMode == "ON" then color = Color3.fromRGB(255, 80, 80)
-    elseif blatantMode == "AUTO" then color = Color3.fromRGB(255, 150, 50) end
+    elseif blatantMode == "Auto" then color = THEME.Accent end
     
-    return blatantMode, "Blatant: "..blatantMode, color
+    return true, "Blatant: "..blatantMode, color
 end)
-BlatantBtn.TextColor3 = (blatantMode == "ON" and Color3.fromRGB(255, 80, 80)) or (blatantMode == "AUTO" and Color3.fromRGB(255, 150, 50)) or THEME.SubText
+BlatantBtn.TextColor3 = (blatantMode == "OFF" and THEME.SubText or (blatantMode == "ON" and Color3.fromRGB(255, 80, 80) or THEME.Accent))
 BlatantBtn.Size = UDim2.new(0, 130, 0, 24)
 
 local RiskyBtn = CreateToggle("Risky Mistakes: "..(riskyMistakes and "ON" or "OFF"), UDim2.new(0, 150, 0, 115), function()
@@ -2599,7 +2598,7 @@ UpdateList = function(detectedText, requiredLetter)
 end
 
 SetupSlider(SliderBtn, SliderBg, SliderFill, function(pct)
-    local max = isBlatant and MAX_CPM_BLATANT or MAX_CPM_LEGIT
+    local max = (blatantMode ~= "OFF") and MAX_CPM_BLATANT or MAX_CPM_LEGIT
     currentCPM = math.floor(MIN_CPM + (pct * (max - MIN_CPM)))
     SliderFill.Size = UDim2.new(pct, 0, 1, 0)
     SliderLabel.Text = "Speed: " .. currentCPM .. " CPM"
@@ -2616,7 +2615,7 @@ MinBtn.MouseButton1Click:Connect(function()
         StatusFrame.Visible = false
         MinBtn.Text = "+"
     else
-        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 550)})
+        Tween(MainFrame, {Size = UDim2.new(0, 300, 0, 500)})
         task.wait(0.2)
         ScrollList.Visible = true
         SettingsFrame.Visible = true
@@ -2698,23 +2697,29 @@ runConn = RunService.RenderStepped:Connect(function()
                 local timeText = timerLbl.Text
                 seconds = tonumber(timeText:match("([%d%.]+)"))
                 
-                StatsData.Frame.Visible = true
-                StatsData.Timer.Text = timeText
-                if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
-                else StatsData.Timer.TextColor3 = THEME.Text end
-
-                -- Blatant Auto Logic
-                if blatantMode == "AUTO" then
-                    if seconds and seconds < blatantThreshold then
+                -- Auto Blatant Logic
+                if blatantMode == "ON" then
+                    isBlatant = true
+                elseif blatantMode == "Auto" then
+                    if seconds and seconds <= autoBlatantThreshold then
                         isBlatant = true
                     else
                         isBlatant = false
                     end
+                else
+                    isBlatant = false
                 end
+
+                StatsData.Frame.Visible = true
+                StatsData.Timer.Text = timeText
+                if seconds and seconds < 3 then StatsData.Timer.TextColor3 = Color3.fromRGB(255, 80, 80)
+                else StatsData.Timer.TextColor3 = THEME.Text end
             end
         else
             StatsData.Frame.Visible = false
-            if blatantMode == "AUTO" then isBlatant = false end
+            if blatantMode == "Auto" then
+                isBlatant = false
+            end
         end
 
         local isMyTurn, requiredLetter = GetTurnInfo(frame)
