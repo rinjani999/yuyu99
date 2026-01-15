@@ -2986,6 +2986,9 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
     end)
+    if not success then
+        warn("WordHelper Loop Error: " .. tostring(err))
+    end
 end)
 
 inputConn = UserInputService.InputBegan:Connect(function(input)
