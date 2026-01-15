@@ -2829,11 +2829,19 @@ runConn = RunService.RenderStepped:Connect(function()
         end
 
         local typeLbl = frame and frame:FindFirstChild("Type")
-        local typeVisible = typeLbl and typeLbl.Visible
+        local typeVisible = (typeLbl and typeLbl.Visible) or false
+        
         if typeVisible and not lastTypeVisible then
             UsedWords = {}
             StatusText.Text = "New Round - Words Reset"
             StatusText.TextColor3 = THEME.Success
+            forceUpdateList = true
+        elseif not typeVisible and lastTypeVisible then
+            UsedWords = {}
+            ShowToast("Automatic Clear Used Word Success", "success")
+            StatusText.Text = "Round Ended - Words Reset"
+            StatusText.TextColor3 = THEME.Success
+            forceUpdateList = true
         end
         lastTypeVisible = typeVisible
         if censored then
