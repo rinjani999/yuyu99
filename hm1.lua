@@ -188,7 +188,7 @@ logConn = LogService.MessageOut:Connect(function(message, type)
     end
 end)
 
-local url = "https://find.wagate.biz.id/tralala.txt"
+local url = "https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/tralala.txt"
 local fileName = "tralala.txt"
 
 -- Temporary Loading UI
@@ -1191,7 +1191,7 @@ local function FetchServers()
                             ShowToast("Teleporting...", "success")
                             
                             if queue_on_teleport then
-                                queue_on_teleport('loadstring(game:HttpGet("https://find.wagate.biz.id/hm1.lua"))()')
+                                queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/hm1.lua"))()')
                             end
 
                             task.spawn(function()
@@ -2530,7 +2530,7 @@ runConn = RunService.Heartbeat:Connect(function()
                                     ShowToast("Teleporting... (" .. kaburAttempts .. "/" .. MAX_KABUR_ATTEMPTS .. ")", "success")
                                     
                                     if queue_on_teleport then
-                                        queue_on_teleport('loadstring(game:HttpGet("https://find.wagate.biz.id/hm1.lua"))()')
+                                        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/hm1.lua"))()')
                                     end
                                     
                                     pcall(function()
@@ -2601,7 +2601,7 @@ runConn = RunService.Heartbeat:Connect(function()
                                     ShowToast("Moving to server (" .. targetServer.playing .. " players)", "success")
                                     
                                     if queue_on_teleport then
-                                        queue_on_teleport('loadstring(game:HttpGet("https://find.wagate.biz.id/hm1.lua"))()')
+                                        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/rinjani999/yuyu99/refs/heads/main/hm1.lua"))()')
                                     end
                                     
                                     pcall(function()
@@ -2831,4 +2831,5 @@ end)
 inputConn = UserInputService.InputBegan:Connect(function(input)
     if unloaded then return end
     if input.KeyCode == TOGGLE_KEY then ScreenGui.Enabled = not ScreenGui.Enabled end
+
 end)
